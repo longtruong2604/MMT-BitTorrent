@@ -18,8 +18,8 @@ def set_socket(port: int, ip: str, dest_port: int) -> socket.socket:
     '''
     sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind((ip, dest_port))
-    used_ports.append(dest_port)
+    sock.bind((ip, port))
+    used_ports.append(port)
 
     return sock
 

@@ -31,7 +31,7 @@ class Tracker:
                              dest_port=dest_port,
                              data=data)
         encrypted_data = segment.data
-        sock.sendto(encrypted_data, addr)
+        sock.sendto(encrypted_data, config.constants.TRACKER_ADDR)
 
     def add_file_owner(self, msg: dict, addr: tuple):
         entry = {

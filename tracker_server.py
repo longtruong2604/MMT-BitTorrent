@@ -1,14 +1,17 @@
 import socket
 import threading
 from tracker import Tracker
+from configs import CFG, Config
+config = Config.from_json(CFG)
 
 def handle_connection(conn, addr):
     conn.send("Hello client, i'm tracker".encode())
     conn.close()
 
 def start_tracker_server():
-    host = '192.168.1.139'
-    port = 9090
+    host = config.constants.TRACKER_ADDR[0]
+    port = config.constants.TRACKER_ADDR[1]
+    print(host, port)
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((host, port))
     server.listen()

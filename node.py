@@ -36,7 +36,6 @@ class Node:
         self.dest_port = dest_port
 
     def send_segment(self, sock: socket.socket, data: bytes, addr: tuple):
-        ip, dest_port = addr
         segment = UDPSegment(src_port=sock.getsockname()[1],
                              dest_port=self.dest_port,
                              data=data)
