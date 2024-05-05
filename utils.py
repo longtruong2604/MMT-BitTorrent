@@ -9,7 +9,7 @@ config = Config.from_json(CFG)
 # global variables
 used_ports = []
 
-def set_socket(port: int) -> socket.socket:
+def set_socket(port: int, ip: str, dest_port: int) -> socket.socket:
     '''
     This function creates a new UDP socket
 
@@ -18,8 +18,8 @@ def set_socket(port: int) -> socket.socket:
     '''
     sock = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('localhost', port))
-    used_ports.append(port)
+    sock.bind((ip, dest_port))
+    used_ports.append(dest_port)
 
     return sock
 
