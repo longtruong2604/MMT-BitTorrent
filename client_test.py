@@ -1,6 +1,6 @@
 import socket
 import threading
-from node import Node, config, generate_random_port, free_socket, set_socket, log, parse_command
+from node import Node, config, log, parse_command
 
 def nodeRun(my_ip, node_id, dest_ip, dest_port):
     node = Node(node_id=node_id,
@@ -79,5 +79,6 @@ def start_peer(my_port, is_messenger=False):
     # Start the client functionality in a separate thread
     threading.Thread(target=peer_client, args=(client_ip, my_port, is_messenger)).start()
 
-# Example usage: start peers sequentially or ensure a delay in client connection attempts
-threading.Thread(target=start_peer, args=(6003, True)).start()
+if __name__ == '__main__':
+    # Example usage: start peers sequentially or ensure a delay in client connection attempts
+    threading.Thread(target=start_peer, args=(6003, True)).start()

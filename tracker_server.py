@@ -28,5 +28,6 @@ def start_tracker_server():
     finally:
         server.close()
 
-# Start the master server in a background thread
-start_tracker_server()
+if __name__ == '__main__':
+    # Start the master server in a background thread
+    start_tracker_server()

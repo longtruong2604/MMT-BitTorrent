@@ -78,5 +78,6 @@ def start_master_server():
     finally:
         server.close()
 
-# Start the master server
-start_master_server()
+if __name__ == '__main__':
+    # Start the master server
+    start_master_server()
