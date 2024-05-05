@@ -2,11 +2,12 @@ import socket
 import threading
 from node import Node, config, generate_random_port, free_socket, set_socket, log, parse_command
 
-def nodeRun(node_id, ip, dest_port):
+def nodeRun(my_ip, node_id, dest_ip, dest_port):
     node = Node(node_id=node_id,
-                rcv_port=generate_random_port(),
-                send_port=generate_random_port(),
-                ip = ip,
+                rcv_port=dest_port,
+                send_port=node_id,
+                my_ip = my_ip,
+                dest_ip = dest_ip,
                 dest_port=dest_port)
     log_content = f"***************** Node program started just right now! *****************"
     log(node_id=node.node_id, content=log_content)
@@ -43,7 +44,7 @@ def connect_to_master(master_host, master_port):
         print(peer_list)
     return peer_list
 
-def send_message(master_host, master_port, message, my_port):
+def send_message(master_host, master_port, message, my_ip, my_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((master_host, master_port))
         s.send(message.encode())
@@ -51,45 +52,32 @@ def send_message(master_host, master_port, message, my_port):
         print("Server response:", response)
         if response.startswith("You are tracking at URL:"):
             # Connect to another server
-            tracker_host = '192.168.1.139'
-            tracker_port = 9090
+            tracker_host = config.constants.TRACKER_ADDR[0]
+            tracker_port = config.constants.TRACKER_ADDR[1]
             # Create a node
-            nodeRun(my_port, tracker_host, tracker_port)
+            nodeRun(my_ip, my_port, tracker_host, tracker_port)
 
-def peer_client(my_port, is_messenger=False):
+def peer_client(my_ip, my_port, is_messenger=False):
     # Server
-    master_host, master_port = '192.168.1.139', 8080
+    master_host, master_port = config.constants.MASTER_ADDR[0], config.constants.MASTER_ADDR[1]
     peers = connect_to_master(master_host, master_port)
     peers = [peer for peer in peers if peer[1] == my_port]
     
     # Delay to allow other servers to start up
     # time.sleep(10)
-
-    # Send hello to all peers
-    # for peer in peers:
-        # send_message(peer, f"Con me may Long")
     
     # If this is the designated messenger peer, send an additional message
     if is_messenger:
-        send_message(master_host, master_port, "decode", my_port)
+        send_message(master_host, master_port, "decode", my_ip, my_port)
     
 def start_peer(my_port, is_messenger=False):
+    client_ip = '172.20.41.134'
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('192.168.1.139', my_port))
+    server.bind((client_ip, my_port))
     server.listen(10)
     
     # Start the client functionality in a separate thread
-    threading.Thread(target=peer_client, args=(my_port, is_messenger)).start()
-
-    # Accept messages from other peers
-    # try:
-    #     while True:
-    #         conn, addr = server.accept()
-    #         message = conn.recv(1024).decode()
-    #         print(f"Received on port {my_port}: {message}")
-    #         conn.close()
-    # finally:
-    #     server.close()
+    threading.Thread(target=peer_client, args=(client_ip, my_port, is_messenger)).start()
 
 # Example usage: start peers sequentially or ensure a delay in client connection attempts
 threading.Thread(target=start_peer, args=(6002, True)).start()

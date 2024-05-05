@@ -5,7 +5,6 @@ import json
 import datetime
 import time
 import warnings
-import socket
 warnings.filterwarnings("ignore")
 
 # implemented classes
@@ -20,7 +19,7 @@ next_call = time.time()
 
 class Tracker:
     def __init__(self):
-        self.tracker_socket = set_socket(config.constants.TRACKER_ADDR[1], config.constants.TRACKER_ADDR[0], config.constants.TRACKER_ADDR[1])
+        self.tracker_socket = set_socket(config.constants.TRACKER_ADDR[0], config.constants.TRACKER_ADDR[1])
         self.file_owners_list = defaultdict(list)
         self.send_freq_list = defaultdict(int)
         self.has_informed_tracker = defaultdict(bool)
@@ -31,7 +30,7 @@ class Tracker:
                              dest_port=dest_port,
                              data=data)
         encrypted_data = segment.data
-        sock.sendto(encrypted_data, config.constants.TRACKER_ADDR)
+        sock.sendto(encrypted_data, addr)
 
     def add_file_owner(self, msg: dict, addr: tuple):
         entry = {
@@ -153,6 +152,7 @@ class Tracker:
 
         while True:
             data, addr = self.tracker_socket.recvfrom(config.constants.BUFFER_SIZE)
+            # print("addr", addr)
             t = Thread(target=self.handle_node_request, args=(data, addr))
             t.start()
 

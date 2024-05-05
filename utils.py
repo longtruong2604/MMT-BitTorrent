@@ -9,7 +9,7 @@ config = Config.from_json(CFG)
 # global variables
 used_ports = []
 
-def set_socket(port: int, ip: str, dest_port: int) -> socket.socket:
+def set_socket(ip: str, port: int) -> socket.socket:
     '''
     This function creates a new UDP socket
 

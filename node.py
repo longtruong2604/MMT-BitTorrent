@@ -24,23 +24,25 @@ next_call = time.time()
 
 
 class Node:
-    def __init__(self, node_id: int, rcv_port: int, send_port: int, ip: str, dest_port: int):
+    def __init__(self, node_id: int, rcv_port: int, send_port: int, my_ip: str, dest_ip: str, dest_port: int):
         self.node_id = node_id
-        self.rcv_socket = set_socket(rcv_port, ip, dest_port)
-        self.send_socket = set_socket(send_port, ip, dest_port)
+        self.rcv_socket = set_socket(dest_ip, rcv_port)
+        self.send_socket = set_socket(my_ip, send_port)
         self.files = self.fetch_owned_files()
         self.is_in_send_mode = False    # is thread uploading a file or not
         self.downloaded_files = {}
         self.running = True
-        self.ip = ip
+        self.my_ip = my_ip
+        self.dest_ip = dest_ip
         self.dest_port = dest_port
 
     def send_segment(self, sock: socket.socket, data: bytes, addr: tuple):
-        segment = UDPSegment(src_port=self.node_id,
-                             dest_port=self.dest_port,
+        ip, dest_port = addr
+        segment = UDPSegment(src_port=sock.getsockname()[1],
+                             dest_port=dest_port,
                              data=data)
         encrypted_data = segment.data
-        sock.sendto(encrypted_data, (self.ip, self.dest_port))
+        sock.sendto(encrypted_data, addr)
 
     def split_file_to_chunks(self, file_path: str, rng: tuple) -> list:
         with open(file_path, "r+b") as f:
@@ -61,7 +63,7 @@ class Node:
                                                  rng=rng)
         
         temp_port = generate_random_port()
-        temp_sock = set_socket(temp_port, self.ip, self.dest_port)
+        temp_sock = set_socket(self.my_ip, temp_port)
         for idx, p in enumerate(chunk_pieces):
             msg = ChunkSharing(src_node_id=self.node_id,
                                dest_node_id=dest_node_id,
@@ -73,7 +75,7 @@ class Node:
             log(node_id=self.node_id, content=log_content)
             self.send_segment(sock=temp_sock,
                               data=Message.encode(msg),
-                              addr=((self.ip, self.dest_port)))
+                              addr=(self.dest_ip, dest_port))
         # now let's tell the neighboring peer that sending has finished (idx = -1)
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node_id,
@@ -81,7 +83,7 @@ class Node:
                            range=rng)
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=(self.ip, self.dest_port))
+                          addr=(self.dest_ip, dest_port))
 
         log_content = "The process of sending a chunk to node{} of file {} has finished!".format(dest_node_id, filename)
         log(node_id=self.node_id, content=log_content)
@@ -92,7 +94,7 @@ class Node:
 
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=tuple((self.ip, self.dest_port)))
+                          addr=tuple((self.dest_ip, self.dest_port)))
 
         free_socket(temp_sock)
 
@@ -105,7 +107,7 @@ class Node:
             self.send_chunk(filename=msg["filename"],
                             rng=msg["range"],
                             dest_node_id=msg["src_node_id"],
-                            dest_port=self.dest_port)
+                            dest_port=addr[1])
 
     def listen(self):
         while True:
@@ -124,7 +126,7 @@ class Node:
 
         self.send_segment(sock=self.send_socket,
                           data=message.encode(),
-                          addr=tuple((self.ip, self.dest_port)))
+                          addr=tuple((self.dest_ip, self.dest_port)))
 
         if self.is_in_send_mode:    # has been already in send(upload) mode
             log_content = f"Some other node also requested a file from you! But you are already in SEND(upload) mode!"
@@ -140,7 +142,7 @@ class Node:
 
     def ask_file_size(self, filename: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
-        temp_sock = set_socket(temp_port, self.ip, self.dest_port)
+        temp_sock = set_socket(self.my_ip, temp_port)
         dest_node = file_owner[0]
 
         msg = Node2Node(src_node_id=self.node_id,
@@ -166,7 +168,7 @@ class Node:
                         filename=filename,
                         size=file_size)
         temp_port = generate_random_port()
-        temp_sock = set_socket(temp_port, self.ip, self.dest_port)
+        temp_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=temp_sock,
                           data=response_msg.encode(),
                           addr=addr)
@@ -182,7 +184,7 @@ class Node:
                            filename=filename,
                            range=range)
         temp_port = generate_random_port()
-        temp_sock = set_socket(temp_port, self.ip, self.dest_port)
+        temp_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
                           addr=tuple(dest_node["addr"]))
@@ -216,6 +218,7 @@ class Node:
         for owner in file_owners:
             if owner[0]['node_id'] != self.node_id:
                 owners.append(owner)
+        print(owners)
         if len(owners) == 0:
             log_content = f"No one has {filename}"
             log(node_id=self.node_id, content=log_content)
@@ -285,10 +288,10 @@ class Node:
                            mode=config.tracker_requests_mode.NEED,
                            filename=filename)
         temp_port = generate_random_port()
-        search_sock = set_socket(temp_port, self.ip, self.dest_port)
+        search_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=search_sock,
                           data=msg.encode(),
-                          addr=tuple((self.ip, self.dest_port)))
+                          addr=tuple((self.dest_ip, self.dest_port)))
         # now we must wait for the tracker response
         while True:
             data, addr = search_sock.recvfrom(config.constants.BUFFER_SIZE)
@@ -311,7 +314,7 @@ class Node:
                            filename="")
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
-                          addr=tuple((self.ip, self.dest_port)))
+                          addr=tuple((self.dest_ip, self.dest_port)))
         free_socket(self.send_socket)
         free_socket(self.rcv_socket)
         self.running = False
@@ -326,7 +329,7 @@ class Node:
 
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
-                          addr=tuple((self.ip, self.dest_port)))
+                          addr=tuple((self.dest_ip, self.dest_port)))
 
         log_content = f"You entered Torrent."
         log(node_id=self.node_id, content=log_content)
@@ -343,7 +346,7 @@ class Node:
 
             self.send_segment(sock=self.send_socket,
                             data=msg.encode(),
-                            addr=tuple((self.ip, self.dest_port)))
+                            addr=tuple((self.dest_ip, self.dest_port)))
 
             datetime.datetime.now()
             next_call = next_call + interval

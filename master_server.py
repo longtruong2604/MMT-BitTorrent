@@ -2,6 +2,8 @@ import socket
 import threading
 from py3createtorrent import create_torrent
 import bencodepy
+from configs import CFG, Config
+config = Config.from_json(CFG)
 
 def get_tracker_url(torrent_file_path):
     with open(torrent_file_path, 'rb') as f:
@@ -17,7 +19,7 @@ def get_tracker_url(torrent_file_path):
 
 def build_torrent():
     source_path = "./"
-    tracker_urls = ["udp://192.168.1.139:9090"]
+    tracker_urls = ["udp://172.20.41.134:9090"]
     create_torrent(source_path, trackers=tracker_urls, output="./torrent/my_torrent_file.torrent")
 
 def handle_peer(conn, peers):
@@ -57,13 +59,14 @@ def connect_to_tracker(tracker_host, tracker_port):
         return None
 
 def start_master_server():
-    host = '192.168.1.139'
-    port = 8080
+    host = config.constants.MASTER_ADDR[0]
+    port = config.constants.MASTER_ADDR[1]
+    print(host, port)
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((host, port))
     server.listen()
     
-    peers = [('192.168.1.139', 6002), ('192.168.1.118', 6003)]
+    peers = [(config.constants.MASTER_ADDR[0], 6002), ('192.168.1.118', 6003)]
     server_running = True
     
     print("Master server is running...")
