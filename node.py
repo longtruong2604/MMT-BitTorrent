@@ -8,6 +8,7 @@ import time
 from itertools import groupby
 import mmap
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # implemented classes
@@ -23,18 +24,20 @@ next_call = time.time()
 
 
 class Node:
-    def __init__(self, node_id: int, rcv_port: int, send_port: int):
+    def __init__(self, node_id: int, rcv_port: int, send_port: int, ip: str, dest_port: int):
         self.node_id = node_id
         self.rcv_socket = set_socket(rcv_port)
         self.send_socket = set_socket(send_port)
         self.files = self.fetch_owned_files()
         self.is_in_send_mode = False    # is thread uploading a file or not
         self.downloaded_files = {}
+        self.running = True
+        self.ip = ip
+        self.dest_port = dest_port
 
     def send_segment(self, sock: socket.socket, data: bytes, addr: tuple):
-        ip, dest_port = addr
         segment = UDPSegment(src_port=sock.getsockname()[1],
-                             dest_port=dest_port,
+                             dest_port=self.dest_port,
                              data=data)
         encrypted_data = segment.data
         sock.sendto(encrypted_data, addr)
@@ -56,6 +59,7 @@ class Node:
         file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
+        
         temp_port = generate_random_port()
         temp_sock = set_socket(temp_port)
         for idx, p in enumerate(chunk_pieces):
@@ -69,7 +73,7 @@ class Node:
             log(node_id=self.node_id, content=log_content)
             self.send_segment(sock=temp_sock,
                               data=Message.encode(msg),
-                              addr=("localhost", dest_port))
+                              addr=(self.ip, self.dest_port))
         # now let's tell the neighboring peer that sending has finished (idx = -1)
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node_id,
@@ -77,7 +81,7 @@ class Node:
                            range=rng)
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=("localhost", dest_port))
+                          addr=(self.ip, self.dest_port))
 
         log_content = "The process of sending a chunk to node{} of file {} has finished!".format(dest_node_id, filename)
         log(node_id=self.node_id, content=log_content)
@@ -101,7 +105,7 @@ class Node:
             self.send_chunk(filename=msg["filename"],
                             rng=msg["range"],
                             dest_node_id=msg["src_node_id"],
-                            dest_port=addr[1])
+                            dest_port=self.dest_port)
 
     def listen(self):
         while True:
@@ -230,6 +234,8 @@ class Node:
         # 2. Now, we know the size, let's split it equally among peers to download chunks of it from them
         step = file_size / len(to_be_used_owners)
         chunks_ranges = [(round(step*i), round(step*(i+1))) for i in range(len(to_be_used_owners))]
+        print(chunks_ranges, to_be_used_owners)
+        
 
         # 3. Create a thread for each neighbor peer to get a chunk from it
         self.downloaded_files[filename] = []
@@ -309,6 +315,7 @@ class Node:
                           addr=tuple(config.constants.TRACKER_ADDR))
         free_socket(self.send_socket)
         free_socket(self.rcv_socket)
+        self.running = False
 
         log_content = f"You exited the torrent!"
         log(node_id=self.node_id, content=log_content)
@@ -326,21 +333,22 @@ class Node:
         log(node_id=self.node_id, content=log_content)
 
     def inform_tracker_periodically(self, interval: int):
-        global next_call
-        log_content = f"I informed the tracker that I'm still alive in the torrent!"
-        log(node_id=self.node_id, content=log_content)
+        if self.running:
+            global next_call
+            log_content = f"I informed the tracker that I'm still alive in the torrent!"
+            log(node_id=self.node_id, content=log_content)
 
-        msg = Node2Tracker(node_id=self.node_id,
-                           mode=config.tracker_requests_mode.REGISTER,
-                           filename="")
+            msg = Node2Tracker(node_id=self.node_id,
+                            mode=config.tracker_requests_mode.REGISTER,
+                            filename="")
 
-        self.send_segment(sock=self.send_socket,
-                          data=msg.encode(),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+            self.send_segment(sock=self.send_socket,
+                            data=msg.encode(),
+                            addr=tuple(config.constants.TRACKER_ADDR))
 
-        datetime.datetime.now()
-        next_call = next_call + interval
-        Timer(next_call - time.time(), self.inform_tracker_periodically, args=(interval,)).start()
+            datetime.datetime.now()
+            next_call = next_call + interval
+            Timer(next_call - time.time(), self.inform_tracker_periodically, args=(interval,)).start()
 
 def run(args):
     node = Node(node_id=args.node_id,

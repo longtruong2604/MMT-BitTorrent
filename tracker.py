@@ -5,6 +5,7 @@ import json
 import datetime
 import time
 import warnings
+import socket
 warnings.filterwarnings("ignore")
 
 # implemented classes
