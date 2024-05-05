@@ -92,7 +92,7 @@ class Node:
 
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+                          addr=tuple(self.ip, self.dest_port))
 
         free_socket(temp_sock)
 
@@ -124,7 +124,7 @@ class Node:
 
         self.send_segment(sock=self.send_socket,
                           data=message.encode(),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+                          addr=tuple(self.ip, self.dest_port))
 
         if self.is_in_send_mode:    # has been already in send(upload) mode
             log_content = f"Some other node also requested a file from you! But you are already in SEND(upload) mode!"
@@ -289,7 +289,7 @@ class Node:
         search_sock = set_socket(temp_port)
         self.send_segment(sock=search_sock,
                           data=msg.encode(),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+                          addr=tuple(self.ip, self.dest_port))
         # now we must wait for the tracker response
         while True:
             data, addr = search_sock.recvfrom(config.constants.BUFFER_SIZE)
@@ -312,7 +312,7 @@ class Node:
                            filename="")
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+                          addr=tuple(self.ip, self.dest_port))
         free_socket(self.send_socket)
         free_socket(self.rcv_socket)
         self.running = False
@@ -327,7 +327,7 @@ class Node:
 
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
-                          addr=tuple(config.constants.TRACKER_ADDR))
+                          addr=tuple(self.ip, self.dest_port))
 
         log_content = f"You entered Torrent."
         log(node_id=self.node_id, content=log_content)
@@ -344,7 +344,7 @@ class Node:
 
             self.send_segment(sock=self.send_socket,
                             data=msg.encode(),
-                            addr=tuple(config.constants.TRACKER_ADDR))
+                            addr=tuple(self.ip, self.dest_port))
 
             datetime.datetime.now()
             next_call = next_call + interval
