@@ -26,7 +26,7 @@ next_call = time.time()
 class Node:
     def __init__(self, node_id: int, rcv_port: int, send_port: int, my_ip: str, dest_ip: str, dest_port: int):
         self.node_id = node_id
-        self.rcv_socket = set_socket(dest_ip, rcv_port)
+        # self.rcv_socket = set_socket(dest_ip, rcv_port)
         self.send_socket = set_socket(my_ip, send_port)
         self.files = self.fetch_owned_files()
         self.is_in_send_mode = False    # is thread uploading a file or not
@@ -316,7 +316,7 @@ class Node:
                           data=Message.encode(msg),
                           addr=tuple((self.dest_ip, self.dest_port)))
         free_socket(self.send_socket)
-        free_socket(self.rcv_socket)
+        # free_socket(self.rcv_socket)
         self.running = False
 
         log_content = f"You exited the torrent!"
