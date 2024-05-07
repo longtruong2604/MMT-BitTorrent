@@ -93,6 +93,12 @@ class Node:
             name_bytes = torrent_info[b'info'][b'name']
             name = name_bytes.decode()
         return name
+    
+    def check_extension(self, filename, extension):
+        _, file_extension = os.path.splitext(filename)
+        if file_extension == extension:
+            return True
+        return False
 
     def send_segment(self, sock: socket.socket, data: bytes, addr: tuple):
         ip, dest_port = addr
@@ -240,7 +246,7 @@ class Node:
 
         free_socket(temp_sock)
 
-    def receive_chunk(self, filename: str, range: tuple, file_owner: tuple):
+    def receive_chunk(self, filename: str, range: tuple, file_owner: tuple, infoHash: str):
         dest_node = file_owner[0]
         # we set idx of ChunkSharing to -1, because we want to tell it that we
         # need the chunk from it
@@ -263,10 +269,10 @@ class Node:
                 free_socket(temp_sock)
                 return
 
-            self.downloaded_files[filename].append(msg)
+            self.downloaded_files[infoHash].append(msg)
 
-    def sort_downloaded_chunks(self, filename: str) -> list:
-        sort_result_by_range = sorted(self.downloaded_files[filename],
+    def sort_downloaded_chunks(self, filename: str, infoHash) -> list:
+        sort_result_by_range = sorted(self.downloaded_files[infoHash],
                                       key=itemgetter("range"))
         group_by_range = groupby(sort_result_by_range,
                                  key=lambda i: i["range"])
@@ -278,11 +284,15 @@ class Node:
 
         return sorted_downloaded_chunks
 
-    def split_file_owners(self, file_owners: list, filename: str):
+    def split_file_owners(self, file_owners: list, filename: str, infoHash: str):
         owners = []
         for owner in file_owners:
             if owner[0]['node_id'] != self.node_id:
                 owners.append(owner)
+            elif owner[0]['node_id'] == self.node_id:
+                log_content = f"You already have this file!"
+                log(node_id=self.node_id, content=log_content)
+                return
         print(owners)
         if len(owners) == 0:
             log_content = f"No one has {filename}"
@@ -295,6 +305,7 @@ class Node:
         # 1. first ask the size of the file from peers
         log_content = f"You are going to download {filename} from Node(s) {[o[0]['node_id'] for o in to_be_used_owners]}"
         log(node_id=self.node_id, content=log_content)
+        
         file_size = self.ask_file_size(filename=filename, file_owner=to_be_used_owners[0])
         log_content = f"The file {filename} which you are about to download, has size of {file_size} bytes"
         log(node_id=self.node_id, content=log_content)
@@ -305,10 +316,10 @@ class Node:
         
 
         # 3. Create a thread for each neighbor peer to get a chunk from it
-        self.downloaded_files[filename] = []
+        self.downloaded_files[infoHash] = []
         neighboring_peers_threads = []
         for idx, obj in enumerate(to_be_used_owners):
-            t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj))
+            t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
             t.setDaemon(True)
             t.start()
             neighboring_peers_threads.append(t)
@@ -319,7 +330,7 @@ class Node:
         log(node_id=self.node_id, content=log_content)
 
         # 4. Now we have downloaded all the chunks of the file. It's time to sort them.
-        sorted_chunks = self.sort_downloaded_chunks(filename=filename)
+        sorted_chunks = self.sort_downloaded_chunks(filename=filename, infoHash=infoHash)
         log_content = f"All the pieces of the {filename} is now sorted and ready to be reassembled."
         log(node_id=self.node_id, content=log_content)
 
@@ -339,18 +350,18 @@ class Node:
         # Process the file torrent
         file_path = f"{config.directory.torrents_dir}"
         
-        if os.path.isfile(file_path):
-            log_content = f"You already have this file!"
-            log(node_id=self.node_id, content=log_content)
-            return
-        else:
-            log_content = f"You just started to download {filename}. Let's search it in torrent!"
-            log(node_id=self.node_id, content=log_content)
+        if os.path.exists(f"{file_path}/{filename}") and (self.check_extension(filename,".torrent")):
             filename_decode = self.decode_torrent_name(f"{file_path}/{filename}")
             infoHash_decode = self.decode_torrent_infohash(f"{file_path}/{filename}")
+            log_content = f"You just started to download {filename}. Let's search it in torrent!"
+            log(node_id=self.node_id, content=log_content)
             tracker_response = self.search_torrent(filename=filename_decode, infoHash= infoHash_decode)
             file_owners = tracker_response['search_result']
-            self.split_file_owners(file_owners=file_owners, filename=filename_decode)
+            self.split_file_owners(file_owners=file_owners, filename=filename_decode, infoHash = infoHash_decode)
+        else: 
+            log_content = f"You don't have this file or the file format is incorrect (.torrent)!"
+            log(node_id=self.node_id, content=log_content)
+            return
 
     def search_torrent(self, filename: str, infoHash: str) -> dict:
         msg = Node2Tracker(node_id=self.node_id,

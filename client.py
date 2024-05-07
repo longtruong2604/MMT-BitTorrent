@@ -65,7 +65,7 @@ def peer_client(my_ip, my_port, is_messenger=False):
         connect_tracker(my_ip, my_port)
     
 def start_peer(my_port, is_messenger=False):
-    client_ip = '192.168.1.140'
+    client_ip = '172.20.41.134'
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((client_ip, my_port))
     server.listen(10)
