@@ -8,6 +8,8 @@ import time
 from itertools import groupby
 import mmap
 import warnings
+import bencodepy
+import hashlib
 
 warnings.filterwarnings("ignore")
 
@@ -35,6 +37,62 @@ class Node:
         self.my_ip = my_ip
         self.dest_ip = dest_ip
         self.dest_port = dest_port
+
+    def create_torrent(self, file_path, output_path):
+        # Read the file and calculate its SHA1 hash
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            file_hash = hashlib.sha1(file_data).digest()
+
+        # Create the info dictionary for the torrent file
+        info = {
+            'length': os.path.getsize(file_path),
+            'name': os.path.basename(file_path),
+            'piece length': 2**20,  # 1 MB piece size (adjust as needed)
+            'pieces': [file_hash]
+        }
+
+        # Calculate info hash
+        info_bencoded = bencodepy.encode(info)
+        info_hash = hashlib.sha1(info_bencoded).digest()
+
+        # Create the torrent dictionary
+        torrent_dict = {
+            'info': info,
+            'announce': 'udp://192.168.1.140:9090',  # Tracker URL
+            'creation date': 1620123456,  # Unix timestamp of creation date
+            'created by': 'My Torrent Creator',  # Your name or software name
+            'comment': 'This is a test torrent file',  # Any comment
+            'info_hash': info_hash
+        }
+
+        # Encode the torrent dictionary using bencode
+        torrent_data = bencodepy.encode(torrent_dict)
+
+        # Write the torrent data to the output file
+        with open(output_path, 'wb') as f:
+            f.write(torrent_data)
+            
+        return info_hash.hex()
+    
+    def decode_torrent_infohash(self, torrent_file):
+        with open(torrent_file, 'rb') as f:
+            torrent_data = f.read()
+            torrent_info = bencodepy.decode(torrent_data)
+
+            # Extract necessary information
+            infoHash = torrent_info[b'info_hash']
+        return infoHash.hex()
+    
+    def decode_torrent_name(self, torrent_file):
+        with open(torrent_file, 'rb') as f:
+            torrent_data = f.read()
+            torrent_info = bencodepy.decode(torrent_data)
+
+            # Extract necessary information
+            name_bytes = torrent_info[b'info'][b'name']
+            name = name_bytes.decode()
+        return name
 
     def send_segment(self, sock: socket.socket, data: bytes, addr: tuple):
         ip, dest_port = addr
@@ -90,7 +148,8 @@ class Node:
 
         msg = Node2Tracker(node_id=self.node_id,
                            mode=config.tracker_requests_mode.UPDATE,
-                           filename=filename)
+                           filename=filename,
+                           infoHash=filename)
 
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
@@ -120,13 +179,19 @@ class Node:
             log(node_id=self.node_id,
                 content=f"You don't have {filename}")
             return
+        
+        infoHash = self.create_torrent(f"{config.directory.node_files_dir}node{self.node_id}/{filename}", f"{config.directory.torrents_dir}/{filename}.torrent")
+        
         message = Node2Tracker(node_id=self.node_id,
                                mode=config.tracker_requests_mode.OWN,
-                               filename=filename)
+                               filename=filename,
+                               infoHash=infoHash)
 
         self.send_segment(sock=self.send_socket,
                           data=message.encode(),
                           addr=tuple((self.dest_ip, self.dest_port)))
+        
+        
 
         if self.is_in_send_mode:    # has been already in send(upload) mode
             log_content = f"Some other node also requested a file from you! But you are already in SEND(upload) mode!"
@@ -271,7 +336,9 @@ class Node:
         self.files.append(filename)
 
     def set_download_mode(self, filename: str):
-        file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
+        # Process the file torrent
+        file_path = f"{config.directory.torrents_dir}"
+        
         if os.path.isfile(file_path):
             log_content = f"You already have this file!"
             log(node_id=self.node_id, content=log_content)
@@ -279,14 +346,17 @@ class Node:
         else:
             log_content = f"You just started to download {filename}. Let's search it in torrent!"
             log(node_id=self.node_id, content=log_content)
-            tracker_response = self.search_torrent(filename=filename)
+            filename_decode = self.decode_torrent_name(f"{file_path}/{filename}")
+            infoHash_decode = self.decode_torrent_infohash(f"{file_path}/{filename}")
+            tracker_response = self.search_torrent(filename=filename_decode, infoHash= infoHash_decode)
             file_owners = tracker_response['search_result']
-            self.split_file_owners(file_owners=file_owners, filename=filename)
+            self.split_file_owners(file_owners=file_owners, filename=filename_decode)
 
-    def search_torrent(self, filename: str) -> dict:
+    def search_torrent(self, filename: str, infoHash: str) -> dict:
         msg = Node2Tracker(node_id=self.node_id,
                            mode=config.tracker_requests_mode.NEED,
-                           filename=filename)
+                           filename=filename,
+                           infoHash=infoHash)
         temp_port = generate_random_port()
         search_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=search_sock,
@@ -309,23 +379,31 @@ class Node:
         return files
 
     def exit_torrent(self):
-        msg = Node2Tracker(node_id=self.node_id,
-                           mode=config.tracker_requests_mode.EXIT,
-                           filename="")
-        self.send_segment(sock=self.send_socket,
-                          data=Message.encode(msg),
-                          addr=tuple((self.dest_ip, self.dest_port)))
-        free_socket(self.send_socket)
-        # free_socket(self.rcv_socket)
-        self.running = False
+        try:
+            if self.send_socket:
+                msg = Node2Tracker(node_id=self.node_id,
+                                   mode=config.tracker_requests_mode.EXIT,
+                                   filename="",
+                                   infoHash="")
+                self.send_segment(sock=self.send_socket,
+                                  data=Message.encode(msg),
+                                  addr=tuple((self.dest_ip, self.dest_port)))
+        except Exception as e:
+            print(f"Error while exiting torrent: {e}")
+        
+        finally:
+            if self.send_socket:
+                free_socket(self.send_socket)
+            self.running = False
 
-        log_content = f"You exited the torrent!"
-        log(node_id=self.node_id, content=log_content)
+            log_content = f"You exited the torrent!"
+            log(node_id=self.node_id, content=log_content)
 
     def enter_torrent(self):
         msg = Node2Tracker(node_id=self.node_id,
                            mode=config.tracker_requests_mode.REGISTER,
-                           filename="")
+                           filename="",
+                           infoHash="")
 
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
@@ -342,7 +420,8 @@ class Node:
 
             msg = Node2Tracker(node_id=self.node_id,
                             mode=config.tracker_requests_mode.REGISTER,
-                            filename="")
+                            filename="",
+                            infoHash="")
 
             self.send_segment(sock=self.send_socket,
                             data=msg.encode(),
@@ -375,7 +454,7 @@ def run(args):
             node.set_send_mode(filename=filename)
         #################### download mode ####################
         elif mode == 'download':
-            t = Thread(target=node.set_download_mode, args=(filename,))
+            t = Thread(target=node.set_download_mode, args=(filename))
             t.setDaemon(True)
             t.start()
         #################### exit mode ####################

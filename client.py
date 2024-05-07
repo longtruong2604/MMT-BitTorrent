@@ -28,7 +28,7 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
             node.set_send_mode(filename=filename)
         #################### download mode ####################
         elif mode == 'download':
-            t = threading.Thread(target=node.set_download_mode, args=(filename,))
+            t = threading.Thread(target=node.set_download_mode, args=(filename, ))
             t.setDaemon(True)
             t.start()
         #################### exit mode ####################
@@ -36,39 +36,33 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
             node.exit_torrent()
             exit(0)
 
-def connect_to_master(master_host, master_port):
+def connect_to_master(master_host, master_port, my_ip, my_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((master_host, master_port))
-        s.send("123".encode())
-        peer_list = eval(s.recv(1024).decode())
-        print(peer_list)
-    return peer_list
-
-def send_message(master_host, master_port, message, my_ip, my_port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((master_host, master_port))
+        message = "Peer: " + str(my_ip) + ":" + str(my_port) + " is connected!"
         s.send(message.encode())
         response = s.recv(1024).decode()
         print("Server response:", response)
-        if response.startswith("You are tracking at URL:"):
-            # Connect to another server
-            tracker_host = config.constants.TRACKER_ADDR[0]
-            tracker_port = config.constants.TRACKER_ADDR[1]
-            # Create a node
-            nodeRun(my_ip, my_port, tracker_host, tracker_port)
+    return
+
+def connect_tracker(my_ip, my_port):
+    # Connect to another server
+    tracker_host = config.constants.TRACKER_ADDR[0]
+    tracker_port = config.constants.TRACKER_ADDR[1]
+    # Create a node
+    nodeRun(my_ip, my_port, tracker_host, tracker_port)
 
 def peer_client(my_ip, my_port, is_messenger=False):
     # Server
     master_host, master_port = config.constants.MASTER_ADDR[0], config.constants.MASTER_ADDR[1]
-    peers = connect_to_master(master_host, master_port)
-    peers = [peer for peer in peers if peer[1] == my_port]
+    connect_to_master(master_host, master_port, my_ip, my_port)
     
     # Delay to allow other servers to start up
     # time.sleep(10)
     
     # If this is the designated messenger peer, send an additional message
     if is_messenger:
-        send_message(master_host, master_port, "decode", my_ip, my_port)
+        connect_tracker(my_ip, my_port)
     
 def start_peer(my_port, is_messenger=False):
     client_ip = '192.168.1.140'

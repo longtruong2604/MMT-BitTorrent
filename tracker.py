@@ -39,9 +39,9 @@ class Tracker:
         }
         log_content = f"Node {msg['node_id']} owns {msg['filename']} and is ready to send."
         log(node_id=0, content=log_content, is_tracker=True)
-
-        self.file_owners_list[msg['filename']].append(json.dumps(entry))
-        self.file_owners_list[msg['filename']] = list(set(self.file_owners_list[msg['filename']]))
+        
+        self.file_owners_list[str(msg['infoHash'])].append(json.dumps(entry))
+        self.file_owners_list[str(msg['infoHash'])] = list(set(self.file_owners_list[str(msg['infoHash'])]))
         self.send_freq_list[msg['node_id']] += 1
         self.send_freq_list[msg['node_id']] -= 1
 
@@ -56,7 +56,7 @@ class Tracker:
         log(node_id=0, content=log_content, is_tracker=True)
 
         matched_entries = []
-        for json_entry in self.file_owners_list[msg['filename']]:
+        for json_entry in self.file_owners_list[str(msg['infoHash'])]:
             entry = json.loads(json_entry)
             matched_entries.append((entry, self.send_freq_list[entry['node_id']]))
 
@@ -125,7 +125,7 @@ class Tracker:
         nodes_json = open(nodes_info_path, 'w')
         json.dump(temp_dict, nodes_json, indent=4, sort_keys=True)
 
-        # saves files' information as a json file
+        # # saves files' information as a json file
         files_json = open(files_info_path, 'w')
         json.dump(self.file_owners_list, files_json, indent=4, sort_keys=True)
 
