@@ -403,8 +403,9 @@ class Node:
             print(f"Error while exiting torrent: {e}")
         
         finally:
-            if self.send_socket:
-                free_socket(self.send_socket)
+            # if self.send_socket:
+            #     free_socket(self.send_socket)
+            self.close_all_sockets()
             self.running = False
 
             log_content = f"You exited the torrent!"
@@ -441,6 +442,13 @@ class Node:
             datetime.datetime.now()
             next_call = next_call + interval
             Timer(next_call - time.time(), self.inform_tracker_periodically, args=(interval,)).start()
+    
+    def close_all_sockets(self):
+        try:
+            if self.send_socket:
+                self.send_socket.close()
+        except Exception as e:
+            print(f"Error while closing sockets: {e}")
 
 def run(args):
     node = Node(node_id=args.node_id,
