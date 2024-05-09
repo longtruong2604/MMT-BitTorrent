@@ -121,13 +121,13 @@ class Node:
             f.flush()
             f.close()
 
-    def send_chunk(self, filename: str, rng: tuple, dest_node_id: int, dest_port: int, infoHash: str):
+    def send_chunk(self, filename: str, rng: tuple, dest_node_ip: str ,dest_node_id: int, dest_port: int, infoHash: str):
         file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        print(self.dest_ip)
+        print(dest_node_ip)
         for idx, p in enumerate(chunk_pieces):
             msg = ChunkSharing(src_node_id=self.node_id,
                                dest_node_id=dest_node_id,
@@ -139,7 +139,7 @@ class Node:
             log(node_id=self.node_id, content=log_content)
             self.send_segment(sock=temp_sock,
                               data=Message.encode(msg),
-                              addr=(self.dest_ip, dest_port))
+                              addr=(dest_node_ip, dest_port))
         # now let's tell the neighboring peer that sending has finished (idx = -1)
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node_id,
@@ -147,7 +147,7 @@ class Node:
                            range=rng)
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=(self.dest_ip, dest_port))
+                          addr=(dest_node_ip, dest_port))
 
         log_content = "The process of sending a chunk to node{} of file {} has finished!".format(dest_node_id, filename)
         log(node_id=self.node_id, content=log_content)
@@ -171,6 +171,7 @@ class Node:
         elif "range" in msg.keys() and msg["chunk"] is None:
             self.send_chunk(filename=msg["filename"],
                             rng=msg["range"],
+                            dest_node_ip=addr[0],
                             dest_node_id=msg["src_node_id"],
                             dest_port=addr[1],
                             infoHash=infoHash)
@@ -271,13 +272,12 @@ class Node:
 
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
-            # msg = Message.decode(data) # but this is not a simple message, it contains chunk's bytes
-            # if msg["idx"] == -1: # end of the file
-            #     free_socket(temp_sock)
-            #     return
+            msg = Message.decode(data) # but this is not a simple message, it contains chunk's bytes
+            if msg["idx"] == -1: # end of the file
+                free_socket(temp_sock)
+                return
 
-            # self.downloaded_files[infoHash].append(msg)
-            print("Fix: ", self.downloaded_files)
+            self.downloaded_files[infoHash].append(msg)
 
     def sort_downloaded_chunks(self, filename: str, infoHash) -> list:
         sort_result_by_range = sorted(self.downloaded_files[infoHash],

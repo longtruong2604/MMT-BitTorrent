@@ -55,11 +55,12 @@ def connect_tracker(my_ip, my_port):
     nodeRun(my_ip, my_port, tracker_host, tracker_port)
     
 def start_peer(my_port):
-    client_ip = '192.168.1.63'
-    
-    # Start the client functionality in a separate thread
-    threading.Thread(target=connect_tracker, args=(client_ip, my_port,)).start()
+    client_ip = '192.168.1.104'
+    connect_tracker(client_ip, my_port)
+    # # Start the client functionality in a separate thread
+    # threading.Thread(target=connect_tracker, args=(client_ip, my_port,)).start()
 
 if __name__ == '__main__':
     # Example usage: start peers sequentially or ensure a delay in client connection attempts
-    threading.Thread(target=start_peer, args=(6002,)).start()
+    threading.Thread(target=start_peer, args=(8888,)).start()
+    
