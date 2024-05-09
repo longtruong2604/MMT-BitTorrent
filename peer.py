@@ -37,21 +37,42 @@ class Node:
         self.my_ip = my_ip
         self.dest_ip = dest_ip
         self.dest_port = dest_port
-
-    def create_torrent(self, file_path, output_path):
-        # Read the file and calculate its SHA1 hash
+    
+    def create_torrent(self, source_path, output_path):
+        if os.path.isfile(source_path):
+            # Source is a file
+            file_info = self.get_file_info(source_path)
+            return self.create_torrent_from_info(file_info, output_path)
+        elif os.path.isdir(source_path):
+            # Source is a directory
+            directory_info = self.get_directory_info(source_path)
+            return self.create_torrent_from_info(directory_info, output_path)
+        
+    def get_file_info(self, file_path):
         with open(file_path, 'rb') as f:
             file_data = f.read()
             file_hash = hashlib.sha1(file_data).digest()
+            return {
+                'name': os.path.basename(file_path),
+                'length': os.path.getsize(file_path),
+                'pieces': [file_hash]
+            }
 
-        # Create the info dictionary for the torrent file
-        info = {
-            'length': os.path.getsize(file_path),
+    def get_directory_info(self, directory_path):
+        files_info = []
+        for root, dirs, files in os.walk(directory_path):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                file_info = self.get_file_info(file_path)
+                file_info['path'] = os.path.relpath(file_path, directory_path)
+                files_info.append(file_info)
+        return {
             'name': os.path.basename(file_path),
-            'piece length': 2**20,  # 1 MB piece size (adjust as needed)
-            'pieces': [file_hash]
+            'files': files_info,
+            'piece length': 2**20  # 1 MB piece size (adjust as needed)
         }
 
+    def create_torrent_from_info(self, info, output_path):
         # Calculate info hash
         info_bencoded = bencodepy.encode(info)
         info_hash = hashlib.sha1(info_bencoded).digest()
@@ -79,7 +100,6 @@ class Node:
         with open(torrent_file, 'rb') as f:
             torrent_data = f.read()
             torrent_info = bencodepy.decode(torrent_data)
-
             # Extract necessary information
             infoHash = torrent_info[b'info_hash']
         return infoHash.hex()
@@ -127,7 +147,6 @@ class Node:
                                                  rng=rng)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        print(dest_node_ip)
         for idx, p in enumerate(chunk_pieces):
             msg = ChunkSharing(src_node_id=self.node_id,
                                dest_node_id=dest_node_id,
