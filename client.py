@@ -16,7 +16,7 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
                 my_ip = my_ip,
                 dest_ip = dest_ip,
                 dest_port=dest_port)
-            log_content = f"***************** Node program started just right now! *****************"
+            log_content = f"***************** CLIENT START! *****************"
             log(node_id=node.node_id, content=log_content)
             node.enter_torrent()
             
@@ -32,7 +32,7 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
 
                 #################### send mode ####################
                 if mode == 'send':
-                    node.set_send_mode(filename=filename)
+                    node.set_send_mode(filename=filename, file_path=(str(config.directory.node_files_dir) + "node" + str(node.node_id)), output_path=(config.directory.torrents_dir), flag=True)
                 #################### download mode ####################
                 elif mode == 'download':
                     t = threading.Thread(target=node.set_download_mode, args=(filename, ))
@@ -55,7 +55,7 @@ def connect_tracker(my_ip, my_port):
     nodeRun(my_ip, my_port, tracker_host, tracker_port)
     
 def start_peer(my_port):
-    client_ip = '192.168.1.63'
+    client_ip = '172.20.41.134'
     
     # Start the client functionality in a separate thread
     threading.Thread(target=connect_tracker, args=(client_ip, my_port,)).start()

@@ -30,25 +30,15 @@ class Node:
         self.node_id = node_id
         # self.rcv_socket = set_socket(dest_ip, rcv_port)
         self.send_socket = set_socket(my_ip, send_port)
-        self.files = self.fetch_owned_files()
+        self.check_nodes_file(config.directory.node_files_dir + 'node' + str(self.node_id))
         self.is_in_send_mode = False    # is thread uploading a file or not
         self.downloaded_files = {}
         self.running = True
         self.my_ip = my_ip
         self.dest_ip = dest_ip
         self.dest_port = dest_port
-    
-    def create_torrent(self, source_path, output_path):
-        if os.path.isfile(source_path):
-            # Source is a file
-            file_info = self.get_file_info(source_path)
-            return self.create_torrent_from_info(file_info, output_path)
-        elif os.path.isdir(source_path):
-            # Source is a directory
-            directory_info = self.get_directory_info(source_path)
-            return self.create_torrent_from_info(directory_info, output_path)
         
-    def get_file_info(self, file_path):
+    def get_file_info(self, file_path: str):
         with open(file_path, 'rb') as f:
             file_data = f.read()
             file_hash = hashlib.sha1(file_data).digest()
@@ -58,45 +48,46 @@ class Node:
                 'pieces': [file_hash]
             }
 
-    def get_directory_info(self, directory_path):
+    def get_directory_info(self, directory_path: str):
         files_info = []
         for root, dirs, files in os.walk(directory_path):
             for file_name in files:
-                file_path = os.path.join(root, file_name)
-                file_info = self.get_file_info(file_path)
-                file_info['path'] = os.path.relpath(file_path, directory_path)
+                file_name = os.path.join(root, file_name)
+                file_info = self.get_file_info(file_name)
+                file_info['path'] = os.path.relpath(file_name, directory_path)
                 files_info.append(file_info)
         return {
-            'name': os.path.basename(file_path),
+            'name': os.path.basename(directory_path),
             'files': files_info,
             'piece length': 2**20  # 1 MB piece size (adjust as needed)
         }
 
-    def create_torrent_from_info(self, info, output_path):
+    def create_torrent_from_info(self, info: str, output_path: str, flag: bool):
         # Calculate info hash
         info_bencoded = bencodepy.encode(info)
         info_hash = hashlib.sha1(info_bencoded).digest()
 
-        # Create the torrent dictionary
-        torrent_dict = {
-            'info': info,
-            'announce': 'udp://' + str(config.constants.TRACKER_ADDR[0]) + ":" + str(config.constants.TRACKER_ADDR[1]),  # Tracker URL
-            'creation date': 1620123456,  # Unix timestamp of creation date
-            'created by': 'My Torrent Creator',  # Your name or software name
-            'comment': 'This is a test torrent file',  # Any comment
-            'info_hash': info_hash
-        }
+        if flag:
+            # Create the torrent dictionary
+            torrent_dict = {
+                'info': info,
+                'announce': 'udp://' + str(config.constants.TRACKER_ADDR[0]) + ":" + str(config.constants.TRACKER_ADDR[1]),  # Tracker URL
+                'creation date': 1620123456,  # Unix timestamp of creation date
+                'created by': 'My Torrent Creator',  # Your name or software name
+                'comment': 'This is a test torrent file',  # Any comment
+                'info_hash': info_hash
+            }
 
-        # Encode the torrent dictionary using bencode
-        torrent_data = bencodepy.encode(torrent_dict)
+            # Encode the torrent dictionary using bencode
+            torrent_data = bencodepy.encode(torrent_dict)
 
-        # Write the torrent data to the output file
-        with open(output_path, 'wb') as f:
-            f.write(torrent_data)
+            # Write the torrent data to the output file
+            with open(output_path, 'wb') as f:
+                f.write(torrent_data)
             
         return info_hash.hex()
     
-    def decode_torrent_infohash(self, torrent_file):
+    def decode_torrent_infohash(self, torrent_file: str):
         with open(torrent_file, 'rb') as f:
             torrent_data = f.read()
             torrent_info = bencodepy.decode(torrent_data)
@@ -104,7 +95,7 @@ class Node:
             infoHash = torrent_info[b'info_hash']
         return infoHash.hex()
     
-    def decode_torrent_name(self, torrent_file):
+    def decode_torrent_name(self, torrent_file: str):
         with open(torrent_file, 'rb') as f:
             torrent_data = f.read()
             torrent_info = bencodepy.decode(torrent_data)
@@ -113,6 +104,26 @@ class Node:
             name_bytes = torrent_info[b'info'][b'name']
             name = name_bytes.decode()
         return name
+    
+    def traverse_directory(self, directory_path: str):
+        file_list = []
+
+        for root, dirs, files in os.walk(directory_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_list.append(file_path)
+
+        return file_list
+    
+    def check_file_in_nested_list(self, lst: list, target: str):
+        for item in lst:
+            if isinstance(item, list):
+                if self.check_file_in_nested_list(item, target):
+                    return True
+            else:
+                if item == target:
+                    return True
+        return False
     
     def check_extension(self, filename, extension):
         _, file_extension = os.path.splitext(filename)
@@ -208,34 +219,73 @@ class Node:
                     log_content = f"Socket error: {e}"
                     log(node_id=self.node_id, content=log_content)
 
-    def set_send_mode(self, filename: str):
-        if filename not in self.files:
+    def set_send_mode(self, filename: str, file_path: str, output_path: str, flag: bool):
+        if self.check_file_in_nested_list(self.files, filename) == False:
             log(node_id=self.node_id,
                 content=f"You don't have {filename}")
             return
+
+        # Check file or dir
+        # LOOP - Hash to tracker of dir
+        source_path = f"{file_path}\{filename}"
         
-        infoHash = self.create_torrent(f"{config.directory.node_files_dir}node{self.node_id}/{filename}", f"{config.directory.torrents_dir}/{filename}.torrent")
-        
-        message = Node2Tracker(node_id=self.node_id,
+        if (os.path.isfile(source_path)):
+            in_send_mode = False
+            file_info = self.get_file_info(source_path)
+            infoHash = self.create_torrent_from_info(file_info, f"{output_path}{filename}.torrent", flag)
+            
+            message = Node2Tracker(node_id=self.node_id,
                                mode=config.tracker_requests_mode.OWN,
                                filename=filename,
                                infoHash=infoHash)
 
-        self.send_segment(sock=self.send_socket,
+            self.send_segment(sock=self.send_socket,
                           data=message.encode(),
                           addr=tuple((self.dest_ip, self.dest_port)))
         
-        if self.is_in_send_mode:    # has been already in send(upload) mode
-            log_content = f"Some other node also requested a file from you! But you are already in SEND(upload) mode!"
-            log(node_id=self.node_id, content=log_content)
-            return
-        else:
-            self.is_in_send_mode = True
-            log_content = f"You are free now! You are waiting for other nodes' requests!"
-            log(node_id=self.node_id, content=log_content)
-            t = Thread(target=self.listen, args=(infoHash,))
-            t.setDaemon(True)
-            t.start()
+            if in_send_mode:    # has been already in send(upload) mode
+                log_content = f"You are already in SEND(upload) mode!"
+                log(node_id=self.node_id, content=log_content)
+                return
+            else:
+                in_send_mode = True
+                log_content = f"DONE!"
+                log(node_id=self.node_id, content=log_content)
+                t = Thread(target=self.listen, args=(infoHash,))
+                t.setDaemon(True)
+                t.start()
+                
+        elif (os.path.isdir(source_path)):
+            in_send_mode = False
+            # Get list of all files in the directory
+            file_list = self.traverse_directory(source_path)                
+            
+            directory_info = self.get_directory_info(source_path)
+            infoHash = self.create_torrent_from_info(directory_info, f"{output_path}{filename}.torrent", flag)
+            
+            message = Node2Tracker(node_id=self.node_id,
+                               mode=config.tracker_requests_mode.OWN,
+                               filename=filename,
+                               infoHash=infoHash)
+
+            self.send_segment(sock=self.send_socket,
+                          data=message.encode(),
+                          addr=tuple((self.dest_ip, self.dest_port)))
+        
+            if in_send_mode:    # has been already in send(upload) mode
+                log_content = f"You are already in SEND(upload) mode!"
+                log(node_id=self.node_id, content=log_content)
+                return
+            else:
+                in_send_mode = True
+                log_content = f"DONE!"
+                log(node_id=self.node_id, content=log_content)
+                t = Thread(target=self.listen, args=(infoHash,))
+                t.setDaemon(True)
+                t.start()
+                
+            for file in file_list:
+                self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
 
     def ask_file_size(self, filename: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
@@ -286,7 +336,7 @@ class Node:
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
                           addr=tuple(dest_node["addr"]))
-        log_content = "I sent a request for a chunk of {0} for node{1}".format(filename, dest_node["node_id"])
+        log_content = "Send a request for a chunk of {0} for node{1}".format(filename, dest_node["node_id"])
         log(node_id=self.node_id, content=log_content)
 
         while True:
@@ -334,7 +384,7 @@ class Node:
         log(node_id=self.node_id, content=log_content)
         
         file_size = self.ask_file_size(filename=filename, file_owner=to_be_used_owners[0])
-        log_content = f"The file {filename} which you are about to download, has size of {file_size} bytes"
+        log_content = f"You are downloading {filename} with the size of {file_size} bytes"
         log(node_id=self.node_id, content=log_content)
 
         # 2. Now, we know the size, let's split it equally among peers to download chunks of it from them
@@ -353,7 +403,7 @@ class Node:
         for t in neighboring_peers_threads:
             t.join()
 
-        log_content = "All the chunks of {} has downloaded from neighboring peers. But they must be reassembled!".format(filename)
+        log_content = "All the chunks of {} has downloaded!".format(filename)
         log(node_id=self.node_id, content=log_content)
 
         # 4. Now we have downloaded all the chunks of the file. It's time to sort them.
@@ -369,7 +419,7 @@ class Node:
                 total_file.append(piece["chunk"])
         self.reassemble_file(chunks=total_file,
                              file_path=file_path)
-        log_content = f"{filename} has successfully downloaded and saved in my files directory."
+        log_content = f"{filename} has successfully downloaded!"
         log(node_id=self.node_id, content=log_content)
         self.files.append(filename)
 
@@ -384,6 +434,12 @@ class Node:
             log(node_id=self.node_id, content=log_content)
             tracker_response = self.search_torrent(filename=filename_decode, infoHash= infoHash_decode)
             file_owners = tracker_response['search_result']
+            
+            # Check filename is file or dir
+            # Create directory with filename
+            # LOOP if filename is dir
+            
+            
             self.split_file_owners(file_owners=file_owners, filename=filename_decode, infoHash = infoHash_decode)
         else: 
             log_content = f"You don't have this file or the file format is incorrect (.torrent)!"
@@ -406,15 +462,27 @@ class Node:
             tracker_msg = Message.decode(data)
             return tracker_msg
 
-    def fetch_owned_files(self) -> list:
-        files = []
-        node_files_dir = config.directory.node_files_dir + 'node' + str(self.node_id)
-        if os.path.isdir(node_files_dir):
-            _, dirs, files = next(os.walk(node_files_dir))
-        else:
-            os.makedirs(node_files_dir)
+    def fetch_owned_files(self, current_path) -> list:
+        files_and_folders = []
 
-        return files
+        items = os.listdir(current_path)
+
+        for item in items:
+            item_path = os.path.join(current_path, item)
+            if os.path.isdir(item_path):
+                subfolder_contents = self.fetch_owned_files(item_path)
+                files_and_folders.append([item] + subfolder_contents)
+            else:
+                files_and_folders.append(item)
+        return files_and_folders
+
+    def check_nodes_file(self, folder_path: str) -> list:
+        if os.path.isdir(folder_path):
+            self.files = self.fetch_owned_files(folder_path)
+        else:
+            os.makedirs(folder_path)
+            self.files = []
+
 
     def exit_torrent(self):
         try:
@@ -452,7 +520,7 @@ class Node:
     def inform_tracker_periodically(self, interval: int):
         if self.running:
             global next_call
-            log_content = f"I informed the tracker that I'm still alive in the torrent!"
+            log_content = f"Ping to server!"
             log(node_id=self.node_id, content=log_content)
 
             msg = Node2Tracker(node_id=self.node_id,
@@ -467,43 +535,3 @@ class Node:
             datetime.datetime.now()
             next_call = next_call + interval
             Timer(next_call - time.time(), self.inform_tracker_periodically, args=(interval,)).start()
-
-def run(args):
-    node = Node(node_id=args.node_id,
-                rcv_port=generate_random_port(),
-                send_port=generate_random_port())
-    log_content = f"***************** Node program started just right now! *****************"
-    log(node_id=node.node_id, content=log_content)
-    node.enter_torrent()
-
-    # We create a thread to periodically informs the tracker to tell it is still in the torrent.
-    timer_thread = Thread(target=node.inform_tracker_periodically, args=(config.constants.NODE_TIME_INTERVAL,))
-    timer_thread.setDaemon(True)
-    timer_thread.start()
-
-    print("ENTER YOUR COMMAND!")
-    while True:
-        command = input()
-        mode, filename = parse_command(command)
-
-        #################### send mode ####################
-        if mode == 'send':
-            node.set_send_mode(filename=filename)
-        #################### download mode ####################
-        elif mode == 'download':
-            t = Thread(target=node.set_download_mode, args=(filename))
-            t.setDaemon(True)
-            t.start()
-        #################### exit mode ####################
-        elif mode == 'exit':
-            node.exit_torrent()
-            exit(0)
-
-
-# if __name__ == '__main__':
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('-node_id', type=int,  help='id of the node you want to create')
-#     node_args = parser.parse_args()
-
-#     # run the node
-#     run(args=node_args)

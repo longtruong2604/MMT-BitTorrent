@@ -37,7 +37,7 @@ class Tracker:
             'node_id': msg['node_id'],
             'addr': addr
         }
-        log_content = f"Node {msg['node_id']} owns {msg['filename']} and is ready to send."
+        log_content = f"Node {msg['node_id']} owns {msg['filename']} and is ready to seed."
         log(node_id=0, content=log_content, is_tracker=True)
         
         self.file_owners_list[str(msg['infoHash'])].append(json.dumps(entry))
@@ -112,11 +112,11 @@ class Tracker:
         Timer(next_call - time.time(), self.check_nodes_periodically, args=(interval,)).start()
 
     def save_db_as_json(self):
-        if not os.path.exists(config.directory.tracker_db_dir):
-            os.makedirs(config.directory.tracker_db_dir)
+        if not os.path.exists(config.directory.database):
+            os.makedirs(config.directory.database)
 
-        nodes_info_path = config.directory.tracker_db_dir + "nodes.json"
-        files_info_path = config.directory.tracker_db_dir + "files.json"
+        nodes_info_path = config.directory.database + "nodes.json"
+        files_info_path = config.directory.database + "files.json"
 
         # saves nodes' information as a json file
         temp_dict = {}
@@ -157,7 +157,7 @@ class Tracker:
             t.start()
 
     def run(self):
-        log_content = f"***************** Tracker program started just right now! *****************"
+        log_content = f"***************** SERVER START! *****************"
         log(node_id=0, content=log_content, is_tracker=True)
         t = Thread(target=self.listen())
         t.daemon = True
