@@ -276,7 +276,7 @@ class Node:
                 return
 
             self.downloaded_files[infoHash].append(msg)
-            print(self.downloaded_files)
+            print("Fix: ", self.downloaded_files)
 
     def sort_downloaded_chunks(self, filename: str, infoHash) -> list:
         sort_result_by_range = sorted(self.downloaded_files[infoHash],
