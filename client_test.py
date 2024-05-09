@@ -1,6 +1,6 @@
 import socket
 import threading
-from node import Node, config, log, parse_command
+from peer import Node, config, log, parse_command
 
 def nodeRun(my_ip, node_id, dest_ip, dest_port):
     node = Node(node_id=node_id,

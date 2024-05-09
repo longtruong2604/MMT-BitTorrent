@@ -1,6 +1,6 @@
 import socket
 import threading
-from node import Node, config, log, parse_command
+from peer import Node, config, log, parse_command
 
 def nodeRun(my_ip, node_id, dest_ip, dest_port):
     node = Node(node_id=node_id,
@@ -65,7 +65,7 @@ def peer_client(my_ip, my_port, is_messenger=False):
         connect_tracker(my_ip, my_port)
     
 def start_peer(my_port, is_messenger=False):
-    client_ip = '172.20.41.134'
+    client_ip = '10.230.81.18'
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((client_ip, my_port))
     server.listen(10)

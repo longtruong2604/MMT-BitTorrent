@@ -59,7 +59,7 @@ class Node:
         # Create the torrent dictionary
         torrent_dict = {
             'info': info,
-            'announce': 'udp://192.168.1.140:9090',  # Tracker URL
+            'announce': 'udp://' + str(config.constants.TRACKER_ADDR[0]) + ":" + str(config.constants.TRACKER_ADDR[1]),  # Tracker URL
             'creation date': 1620123456,  # Unix timestamp of creation date
             'created by': 'My Torrent Creator',  # Your name or software name
             'comment': 'This is a test torrent file',  # Any comment
