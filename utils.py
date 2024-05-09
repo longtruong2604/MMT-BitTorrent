@@ -55,12 +55,12 @@ def parse_command(command: str):
     '''
     parts = command.split(' ')
     try:
-        if len(parts) == 4:
-            mode = parts[2]
-            filename = parts[3]
+        if len(parts) == 2:
+            mode = parts[0]
+            filename = parts[1]
             return mode, filename
-        elif len(parts) == 3:
-            mode = parts[2]
+        elif len(parts) == 1:
+            mode = parts[0]
             filename = ""
             return mode, filename
     except IndexError:

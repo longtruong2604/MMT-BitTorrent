@@ -18,6 +18,8 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
                 dest_port=dest_port)
             log_content = f"***************** CLIENT START! *****************"
             log(node_id=node.node_id, content=log_content)
+            
+            # print(node.files)
             node.enter_torrent()
             
             # We create a thread to periodically informs the tracker to tell it is still in the torrent.
@@ -25,7 +27,7 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
             timer_thread.setDaemon(True)
             timer_thread.start()
 
-            print("ENTER YOUR COMMAND (ex: torrent mode <mode> <fileName>!")
+            print("ENTER YOUR COMMAND (ex: <mode> <fileName>!")
             while True:
                 nodeCommand = input()
                 mode, filename = parse_command(nodeCommand)

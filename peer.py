@@ -30,7 +30,7 @@ class Node:
         self.node_id = node_id
         # self.rcv_socket = set_socket(dest_ip, rcv_port)
         self.send_socket = set_socket(my_ip, send_port)
-        self.check_nodes_file(config.directory.node_files_dir + 'node' + str(self.node_id))
+        self.files = self.check_nodes_file(config.directory.node_files_dir + 'node' + str(self.node_id))
         self.is_in_send_mode = False    # is thread uploading a file or not
         self.downloaded_files = {}
         self.running = True
@@ -95,6 +95,29 @@ class Node:
             infoHash = torrent_info[b'info_hash']
         return infoHash.hex()
     
+    def handle_torrent(self, file_path: str):
+        with open(f"{file_path}", 'rb') as f:
+            torrent_data = f.read()
+            torrent_info = bencodepy.decode(torrent_data)
+            
+            result = []
+            for i in range(len(torrent_info[b'info'][b'files'])):
+                data = {
+                    'name': torrent_info[b'info'][b'files'][i][b'name'],
+                    'length': torrent_info[b'info'][b'files'][i][b'length'],
+                    'pieces': torrent_info[b'info'][b'files'][i][b'pieces']
+                }
+                
+                info_bencoded = bencodepy.encode(data)
+                info_hash = hashlib.sha1(info_bencoded).digest()
+                
+                result.append({
+                    'name': data['name'].decode('utf-8'),
+                    'data': info_hash.hex()
+                })
+    
+            return result
+    
     def decode_torrent_name(self, torrent_file: str):
         with open(torrent_file, 'rb') as f:
             torrent_data = f.read()
@@ -112,6 +135,9 @@ class Node:
             for file in files:
                 file_path = os.path.join(root, file)
                 file_list.append(file_path)
+            for dir in dirs:
+                dir_path = os.path.join(root,dir)
+                file_list.append(dir_path)
 
         return file_list
     
@@ -124,6 +150,16 @@ class Node:
                 if item == target:
                     return True
         return False
+    
+    def get_folder_size(self, folder_path: str):
+        total_size = 0
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            if os.path.isdir(item_path):
+                total_size += self.get_folder_size(item_path)
+            else:
+                total_size += os.path.getsize(item_path)
+        return total_size
     
     def check_extension(self, filename, extension):
         _, file_extension = os.path.splitext(filename)
@@ -152,8 +188,8 @@ class Node:
             f.flush()
             f.close()
 
-    def send_chunk(self, filename: str, rng: tuple, dest_node_ip: str ,dest_node_id: int, dest_port: int, infoHash: str):
-        file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
+    def send_chunk(self, filename: str,file_path: str, rng: tuple, dest_node_ip: str ,dest_node_id: int, dest_port: int, infoHash: str):
+        file_path = f"{file_path}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
         temp_port = generate_random_port()
@@ -162,6 +198,7 @@ class Node:
             msg = ChunkSharing(src_node_id=self.node_id,
                                dest_node_id=dest_node_id,
                                filename=filename,
+                               file_path=file_path,
                                range=rng,
                                idx=idx,
                                chunk=p)
@@ -174,6 +211,7 @@ class Node:
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node_id,
                            filename=filename,
+                           file_path=file_path,
                            range=rng)
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
@@ -200,11 +238,18 @@ class Node:
         # 2. Wants a chunk of a file
         elif "range" in msg.keys() and msg["chunk"] is None:
             self.send_chunk(filename=msg["filename"],
+                            file_path=msg["file_path"],
                             rng=msg["range"],
                             dest_node_ip=addr[0],
                             dest_node_id=msg["src_node_id"],
                             dest_port=addr[1],
                             infoHash=infoHash)
+        # 3. Check if folder
+        elif "type" in msg.keys() and msg["type"] == -1:
+            self.tell_is_folder(msg=msg, addr=addr)
+        # 4. Get list of files from peer:
+        elif "list" in msg.keys() and msg["list"] == []:
+            self.tell_list_of_files(msg, addr=addr)
 
     def listen(self, infoHash: str):
         while True:
@@ -224,7 +269,6 @@ class Node:
             log(node_id=self.node_id,
                 content=f"You don't have {filename}")
             return
-
         # Check file or dir
         # LOOP - Hash to tracker of dir
         source_path = f"{file_path}\{filename}"
@@ -287,14 +331,18 @@ class Node:
             for file in file_list:
                 self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
 
-    def ask_file_size(self, filename: str, file_owner: tuple) -> int:
+    def ask_file_size(self, filename: str, file_path: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
         dest_node = file_owner[0]
 
         msg = Node2Node(src_node_id=self.node_id,
                         dest_node_id=dest_node["node_id"],
-                        filename=filename)
+                        filename=filename,
+                        file_path=file_path,
+                        size = -1,
+                        type = 0,
+                        list = [])
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
                           addr=tuple(dest_node["addr"]))
@@ -308,12 +356,21 @@ class Node:
 
     def tell_file_size(self, msg: dict, addr: tuple):
         filename = msg["filename"]
-        file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
-        file_size = os.stat(file_path).st_size
+        f_path = msg["file_path"]
+        file_path = f"{f_path}\{filename}"
+        print(file_path)
+        if os.path.isfile(file_path):
+            file_size = os.stat(file_path).st_size
+        else:
+            file_size = self.get_folder_size(file_path)
+            
         response_msg = Node2Node(src_node_id=self.node_id,
                         dest_node_id=msg["src_node_id"],
                         filename=filename,
-                        size=file_size)
+                        file_path=file_path,
+                        size=file_size,
+                        type = 0, 
+                        list = [])
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=temp_sock,
@@ -322,7 +379,94 @@ class Node:
 
         free_socket(temp_sock)
 
-    def receive_chunk(self, filename: str, range: tuple, file_owner: tuple, infoHash: str):
+    def ask_is_folder(self, file_path: str, file_owner: tuple) -> int:
+        temp_port = generate_random_port()
+        temp_sock = set_socket(self.my_ip, temp_port)
+        dest_node = file_owner[0]
+
+        msg = Node2Node(src_node_id=self.node_id,
+                        dest_node_id=dest_node["node_id"],
+                        filename=file_path,
+                        file_path=file_path,
+                        size = 0,
+                        type = -1,
+                        list = [])
+        self.send_segment(sock=temp_sock,
+                          data=msg.encode(),
+                          addr=tuple(dest_node["addr"]))
+        while True:
+            data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
+            dest_node_response = Message.decode(data)
+            result = dest_node_response["type"]
+            free_socket(temp_sock)
+
+            return result
+        
+    def tell_is_folder(self, msg: dict, addr: tuple):
+        filename = msg["filename"]
+        if os.path.isfile(filename):
+            isFolder = 0
+        else:
+            isFolder = 1
+            
+        response_msg = Node2Node(src_node_id=self.node_id,
+                        dest_node_id=msg["src_node_id"],
+                        filename=filename,
+                        file_path="",
+                        size=0,
+                        type=isFolder, 
+                        list = [])
+        temp_port = generate_random_port()
+        temp_sock = set_socket(self.my_ip, temp_port)
+        self.send_segment(sock=temp_sock,
+                          data=response_msg.encode(),
+                          addr=addr)
+
+        free_socket(temp_sock)
+        
+    def ask_list_of_files(self, filename: str, file_owner: tuple) -> int:
+        temp_port = generate_random_port()
+        temp_sock = set_socket(self.my_ip, temp_port)
+        dest_node = file_owner[0]
+
+        msg = Node2Node(src_node_id=self.node_id,
+                        dest_node_id=dest_node["node_id"],
+                        filename=filename,
+                        file_path="",
+                        size = 0,
+                        type = 0,
+                        list = [])
+        self.send_segment(sock=temp_sock,
+                          data=msg.encode(),
+                          addr=tuple(dest_node["addr"]))
+        while True:
+            data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
+            dest_node_response = Message.decode(data)
+            result = dest_node_response["list"]
+            free_socket(temp_sock)
+
+            return result
+        
+    def tell_list_of_files(self, msg: dict, addr: tuple):
+        filename = msg["filename"]
+        result = self.fetch_owned_files(filename)
+            
+        response_msg = Node2Node(src_node_id=self.node_id,
+                        dest_node_id=msg["src_node_id"],
+                        filename=filename,
+                        file_path="",
+                        size= 0,
+                        type= 0, 
+                        list = result)
+        temp_port = generate_random_port()
+        temp_sock = set_socket(self.my_ip, temp_port)
+        self.send_segment(sock=temp_sock,
+                          data=response_msg.encode(),
+                          addr=addr)
+
+        free_socket(temp_sock)
+
+    def receive_chunk(self, filename: str, file_path: str, range: tuple, file_owner: tuple, infoHash: str):
         dest_node = file_owner[0]
         # we set idx of ChunkSharing to -1, because we want to tell it that we
         # need the chunk from it
@@ -330,9 +474,11 @@ class Node:
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node["node_id"],
                            filename=filename,
+                           file_path = file_path,
                            range=range)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
+        print(dest_node)
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
                           addr=tuple(dest_node["addr"]))
@@ -372,31 +518,63 @@ class Node:
                 return
         print(owners)
         if len(owners) == 0:
-            log_content = f"No one has {filename}"
+            log_content = f"No one has file/folder {filename}"
             log(node_id=self.node_id, content=log_content)
             return
         # sort owners based on their sending frequency
         owners = sorted(owners, key=lambda x: x[1], reverse=True)
 
         to_be_used_owners = owners[:config.constants.MAX_SPLITTNES_RATE]
-        # 1. first ask the size of the file from peers
+        # Ask the size of the file from peers
         log_content = f"You are going to download {filename} from Node(s) {[o[0]['node_id'] for o in to_be_used_owners]}"
         log(node_id=self.node_id, content=log_content)
         
-        file_size = self.ask_file_size(filename=filename, file_owner=to_be_used_owners[0])
+        file_size = self.ask_file_size(filename=filename, file_path=f"{config.directory.node_files_dir}node{to_be_used_owners[0][0]['node_id']}", file_owner=to_be_used_owners[0])
         log_content = f"You are downloading {filename} with the size of {file_size} bytes"
         log(node_id=self.node_id, content=log_content)
-
-        # 2. Now, we know the size, let's split it equally among peers to download chunks of it from them
-        step = file_size / len(to_be_used_owners)
-        chunks_ranges = [(round(step*i), round(step*(i+1))) for i in range(len(to_be_used_owners))]
         
+        file_path = f"{config.directory.node_files_dir}node{file_owners[0][0]['node_id']}\{filename}"
+        isFolder = self.ask_is_folder(file_path = file_path,file_owner = file_owners[0])
+
+        if isFolder:
+            list_data_torrent = self.handle_torrent(f"{config.directory.torrents_dir}{filename}.torrent")
+            source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}"
+            if not os.path.exists(source_path):
+                os.makedirs(source_path)
+                
+            list_of_files = self.ask_list_of_files(filename=file_path, file_owner = file_owners[0])
+            # Xu ly
+            for file in list_of_files:
+                if isinstance(file, str):                    
+                    target_object = [item for item in list_data_torrent if item['name'] == file][0]
+                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}\{str(file)}", infoHash = str(target_object['data']))
+                elif isinstance(file, list):
+                    if not os.path.exists(f"{source_path}\{str(file[0])}"):
+                        os.makedirs(f"{source_path}\{str(file[0])}")
+                    self.handle_download(list_of_files=file[1:], list_data_torrent=list_data_torrent, to_be_used_owners=to_be_used_owners
+                                         , file_path=f"{file_path}\{str(file[0])}"
+                                         , source_path=f"{source_path}\{str(file[0])}")
+        else:
+            self.download(file_owners=to_be_used_owners, filename=filename,
+                          file_path = f"{config.directory.node_files_dir}node{file_owners[0][0]['node_id']}", 
+                          source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}",
+                          infoHash = infoHash)
+        
+        log_content = f"DOWNLOAD SUCCESS!!!!"
+        log(node_id=self.node_id, content=log_content)
+
+    def download(self, file_owners: list, filename: str, file_path: str, source_path: str, infoHash: str):
+        # 1. Ask file size
+        file_size = self.ask_file_size(filename=filename, file_path=file_path, file_owner=file_owners[0])
+        # 2. Now, we know the size, let's split it equally among peers to download chunks of it from them
+        step = file_size / len(file_owners)
+        chunks_ranges = [(round(step*i), round(step*(i+1))) for i in range(len(file_owners))]
 
         # 3. Create a thread for each neighbor peer to get a chunk from it
         self.downloaded_files[infoHash] = []
         neighboring_peers_threads = []
-        for idx, obj in enumerate(to_be_used_owners):
-            t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
+        for idx, obj in enumerate(file_owners):
+            t = Thread(target=self.receive_chunk, args=(filename, file_path, chunks_ranges[idx], obj, infoHash))
             t.setDaemon(True)
             t.start()
             neighboring_peers_threads.append(t)
@@ -413,15 +591,30 @@ class Node:
 
         # 5. Finally, we assemble the chunks to re-build the file
         total_file = []
-        file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
         for chunk in sorted_chunks:
             for piece in chunk:
                 total_file.append(piece["chunk"])
         self.reassemble_file(chunks=total_file,
-                             file_path=file_path)
+                             file_path=source_path)
         log_content = f"{filename} has successfully downloaded!"
         log(node_id=self.node_id, content=log_content)
         self.files.append(filename)
+
+    def handle_download(self, list_of_files: list, list_data_torrent: list, to_be_used_owners: list, file_path: str, source_path: str):
+        for file in list_of_files:
+            if isinstance(file, str):
+                target_object = [item for item in list_data_torrent if item['name'] == file]
+                if target_object:
+                    target_object = target_object[0]
+                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}\{str(file)}", infoHash = str(target_object['data']))
+                else:
+                    return
+            elif isinstance(file, list):
+                if not os.path.exists(f"{source_path}\{str(file[0])}"):
+                    os.makedirs(f"{source_path}\{str(file[0])}")
+                self.handle_download(list_of_files=file[1:], list_data_torrent=list_data_torrent, to_be_used_owners=to_be_used_owners
+                                         , file_path=f"{file_path}\{str(file[0])}"
+                                         , source_path=f"{source_path}\{str(file[0])}")
 
     def set_download_mode(self, filename: str):
         # Process the file torrent
@@ -431,15 +624,10 @@ class Node:
             filename_decode = self.decode_torrent_name(f"{file_path}/{filename}")
             infoHash_decode = self.decode_torrent_infohash(f"{file_path}/{filename}")
             log_content = f"You just started to download {filename}. Let's search it in torrent!"
-            log(node_id=self.node_id, content=log_content)
+            log(node_id=self.node_id, content=log_content)  
             tracker_response = self.search_torrent(filename=filename_decode, infoHash= infoHash_decode)
+            
             file_owners = tracker_response['search_result']
-            
-            # Check filename is file or dir
-            # Create directory with filename
-            # LOOP if filename is dir
-            
-            
             self.split_file_owners(file_owners=file_owners, filename=filename_decode, infoHash = infoHash_decode)
         else: 
             log_content = f"You don't have this file or the file format is incorrect (.torrent)!"
@@ -476,12 +664,13 @@ class Node:
                 files_and_folders.append(item)
         return files_and_folders
 
-    def check_nodes_file(self, folder_path: str) -> list:
+    def check_nodes_file(self, folder_path: str):
         if os.path.isdir(folder_path):
-            self.files = self.fetch_owned_files(folder_path)
+            files = self.fetch_owned_files(folder_path)
         else:
             os.makedirs(folder_path)
-            self.files = []
+            files = []
+        return files
 
 
     def exit_torrent(self):
