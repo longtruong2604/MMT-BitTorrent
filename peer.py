@@ -127,6 +127,7 @@ class Node:
                                                  rng=rng)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
+        print(self.dest_ip)
         for idx, p in enumerate(chunk_pieces):
             msg = ChunkSharing(src_node_id=self.node_id,
                                dest_node_id=dest_node_id,
@@ -270,12 +271,12 @@ class Node:
 
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
-            msg = Message.decode(data) # but this is not a simple message, it contains chunk's bytes
-            if msg["idx"] == -1: # end of the file
-                free_socket(temp_sock)
-                return
+            # msg = Message.decode(data) # but this is not a simple message, it contains chunk's bytes
+            # if msg["idx"] == -1: # end of the file
+            #     free_socket(temp_sock)
+            #     return
 
-            self.downloaded_files[infoHash].append(msg)
+            # self.downloaded_files[infoHash].append(msg)
             print("Fix: ", self.downloaded_files)
 
     def sort_downloaded_chunks(self, filename: str, infoHash) -> list:
