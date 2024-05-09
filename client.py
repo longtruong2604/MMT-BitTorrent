@@ -54,8 +54,8 @@ def connect_tracker(my_ip, my_port):
 
 def peer_client(my_ip, my_port, is_messenger=False):
     # Server
-    master_host, master_port = config.constants.MASTER_ADDR[0], config.constants.MASTER_ADDR[1]
-    connect_to_master(master_host, master_port, my_ip, my_port)
+    # master_host, master_port = config.constants.MASTER_ADDR[0], config.constants.MASTER_ADDR[1]
+    # connect_to_master(master_host, master_port, my_ip, my_port)
     
     # Delay to allow other servers to start up
     # time.sleep(10)
@@ -65,10 +65,10 @@ def peer_client(my_ip, my_port, is_messenger=False):
         connect_tracker(my_ip, my_port)
     
 def start_peer(my_port, is_messenger=False):
-    client_ip = '10.230.81.18'
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((client_ip, my_port))
-    server.listen(10)
+    client_ip = '192.168.1.63'
+    # server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # server.bind((client_ip, my_port))
+    # server.listen(10)
     
     # Start the client functionality in a separate thread
     threading.Thread(target=peer_client, args=(client_ip, my_port, is_messenger)).start()
