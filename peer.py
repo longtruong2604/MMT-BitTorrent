@@ -125,7 +125,6 @@ class Node:
         file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
-        
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
         for idx, p in enumerate(chunk_pieces):
@@ -324,13 +323,14 @@ class Node:
         # 3. Create a thread for each neighbor peer to get a chunk from it
         self.downloaded_files[infoHash] = []
         neighboring_peers_threads = []
-        for idx, obj in enumerate(to_be_used_owners):
-            t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
-            t.setDaemon(True)
-            t.start()
-            neighboring_peers_threads.append(t)
-        for t in neighboring_peers_threads:
-            t.join()
+        # for idx, obj in enumerate(to_be_used_owners):
+        #     t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
+        #     t.setDaemon(True)
+        #     t.start()
+        #     neighboring_peers_threads.append(t)
+        # for t in neighboring_peers_threads:
+        #     t.join()
+        print("Loi o day")
 
         log_content = "All the chunks of {} has downloaded from neighboring peers. But they must be reassembled!".format(filename)
         log(node_id=self.node_id, content=log_content)
