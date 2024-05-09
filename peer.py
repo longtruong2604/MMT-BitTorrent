@@ -330,6 +330,7 @@ class Node:
             t.setDaemon(True)
             t.start()
             neighboring_peers_threads.append(t)
+            print("hi", neighboring_peers_threads)
         for t in neighboring_peers_threads:
             t.join()
 
