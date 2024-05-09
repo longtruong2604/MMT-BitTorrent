@@ -121,7 +121,7 @@ class Node:
             f.flush()
             f.close()
 
-    def send_chunk(self, filename: str, rng: tuple, dest_node_id: int, dest_port: int):
+    def send_chunk(self, filename: str, rng: tuple, dest_node_id: int, dest_port: int, infoHash: str):
         file_path = f"{config.directory.node_files_dir}node{self.node_id}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
@@ -155,7 +155,7 @@ class Node:
         msg = Node2Tracker(node_id=self.node_id,
                            mode=config.tracker_requests_mode.UPDATE,
                            filename=filename,
-                           infoHash=filename)
+                           infoHash=infoHash)
 
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
@@ -163,7 +163,7 @@ class Node:
 
         free_socket(temp_sock)
 
-    def handle_requests(self, msg: dict, addr: tuple):
+    def handle_requests(self, msg: dict, addr: tuple, infoHash: str):
         # 1. asks the node about a file size
         if "size" in msg.keys() and msg["size"] == -1:
             self.tell_file_size(msg=msg, addr=addr)
@@ -172,14 +172,15 @@ class Node:
             self.send_chunk(filename=msg["filename"],
                             rng=msg["range"],
                             dest_node_id=msg["src_node_id"],
-                            dest_port=addr[1])
+                            dest_port=addr[1],
+                            infoHash=infoHash)
 
-    def listen(self):
+    def listen(self, infoHash: str):
         while True:
             try:
                 data, addr = self.send_socket.recvfrom(config.constants.BUFFER_SIZE)
                 msg = Message.decode(data)
-                self.handle_requests(msg=msg, addr=addr)
+                self.handle_requests(msg=msg, addr=addr, infoHash=infoHash)
             except OSError as e:
                 if e.errno == 10038:
                     break  # Exit the loop and terminate the thread
@@ -204,8 +205,6 @@ class Node:
                           data=message.encode(),
                           addr=tuple((self.dest_ip, self.dest_port)))
         
-        
-
         if self.is_in_send_mode:    # has been already in send(upload) mode
             log_content = f"Some other node also requested a file from you! But you are already in SEND(upload) mode!"
             log(node_id=self.node_id, content=log_content)
@@ -214,7 +213,7 @@ class Node:
             self.is_in_send_mode = True
             log_content = f"You are free now! You are waiting for other nodes' requests!"
             log(node_id=self.node_id, content=log_content)
-            t = Thread(target=self.listen, args=())
+            t = Thread(target=self.listen, args=(infoHash,))
             t.setDaemon(True)
             t.start()
 
@@ -330,7 +329,6 @@ class Node:
             t.setDaemon(True)
             t.start()
             neighboring_peers_threads.append(t)
-            print("hi", neighboring_peers_threads)
         for t in neighboring_peers_threads:
             t.join()
 
