@@ -255,6 +255,7 @@ class Node:
         dest_node = file_owner[0]
         # we set idx of ChunkSharing to -1, because we want to tell it that we
         # need the chunk from it
+        
         msg = ChunkSharing(src_node_id=self.node_id,
                            dest_node_id=dest_node["node_id"],
                            filename=filename,
@@ -275,6 +276,7 @@ class Node:
                 return
 
             self.downloaded_files[infoHash].append(msg)
+            print(self.downloaded_files)
 
     def sort_downloaded_chunks(self, filename: str, infoHash) -> list:
         sort_result_by_range = sorted(self.downloaded_files[infoHash],
@@ -323,14 +325,13 @@ class Node:
         # 3. Create a thread for each neighbor peer to get a chunk from it
         self.downloaded_files[infoHash] = []
         neighboring_peers_threads = []
-        # for idx, obj in enumerate(to_be_used_owners):
-        #     t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
-        #     t.setDaemon(True)
-        #     t.start()
-        #     neighboring_peers_threads.append(t)
-        # for t in neighboring_peers_threads:
-        #     t.join()
-        print("Loi o day")
+        for idx, obj in enumerate(to_be_used_owners):
+            t = Thread(target=self.receive_chunk, args=(filename, chunks_ranges[idx], obj, infoHash))
+            t.setDaemon(True)
+            t.start()
+            neighboring_peers_threads.append(t)
+        for t in neighboring_peers_threads:
+            t.join()
 
         log_content = "All the chunks of {} has downloaded from neighboring peers. But they must be reassembled!".format(filename)
         log(node_id=self.node_id, content=log_content)
