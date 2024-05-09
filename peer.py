@@ -176,9 +176,16 @@ class Node:
 
     def listen(self):
         while True:
-            data, addr = self.send_socket.recvfrom(config.constants.BUFFER_SIZE)
-            msg = Message.decode(data)
-            self.handle_requests(msg=msg, addr=addr)
+            try:
+                data, addr = self.send_socket.recvfrom(config.constants.BUFFER_SIZE)
+                msg = Message.decode(data)
+                self.handle_requests(msg=msg, addr=addr)
+            except OSError as e:
+                if e.errno == 10038:
+                    break  # Exit the loop and terminate the thread
+                else:
+                    log_content = f"Socket error: {e}"
+                    log(node_id=self.node_id, content=log_content)
 
     def set_send_mode(self, filename: str):
         if filename not in self.files:
@@ -323,6 +330,7 @@ class Node:
             t.setDaemon(True)
             t.start()
             neighboring_peers_threads.append(t)
+            print("hi", neighboring_peers_threads)
         for t in neighboring_peers_threads:
             t.join()
 
@@ -383,7 +391,7 @@ class Node:
         files = []
         node_files_dir = config.directory.node_files_dir + 'node' + str(self.node_id)
         if os.path.isdir(node_files_dir):
-            _, _, files = next(os.walk(node_files_dir))
+            _, dirs, files = next(os.walk(node_files_dir))
         else:
             os.makedirs(node_files_dir)
 
@@ -406,7 +414,6 @@ class Node:
             if self.send_socket:
                 free_socket(self.send_socket)
             self.running = False
-
             log_content = f"You exited the torrent!"
             log(node_id=self.node_id, content=log_content)
 
@@ -474,10 +481,10 @@ def run(args):
             exit(0)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-node_id', type=int,  help='id of the node you want to create')
-    node_args = parser.parse_args()
+# if __name__ == '__main__':
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('-node_id', type=int,  help='id of the node you want to create')
+#     node_args = parser.parse_args()
 
-    # run the node
-    run(args=node_args)
+#     # run the node
+#     run(args=node_args)
