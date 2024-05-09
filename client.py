@@ -3,27 +3,21 @@ from peer import Node, config, log, parse_command
 
 thread_lock = threading.Lock()
 
-def close_all_threads():
-    with thread_lock:
-        for thread in threading.enumerate():
-            if thread is not threading.current_thread():
-                thread.join()
-
 def nodeRun(my_ip, node_id, dest_ip, dest_port):
-    node = Node(node_id=node_id,
-                rcv_port=dest_port,
-                send_port=node_id,
-                my_ip = my_ip,
-                dest_ip = dest_ip,
-                dest_port=dest_port)
-    log_content = f"***************** Node program started just right now! *****************"
-    log(node_id=node.node_id, content=log_content)
     
     print("Enter 'join' to connect Tracker server or 'exit' to exit!")
     
     while True:
         command = input()
         if command.lower() == 'join':
+            node = Node(node_id=node_id,
+                rcv_port=dest_port,
+                send_port=node_id,
+                my_ip = my_ip,
+                dest_ip = dest_ip,
+                dest_port=dest_port)
+            log_content = f"***************** Node program started just right now! *****************"
+            log(node_id=node.node_id, content=log_content)
             node.enter_torrent()
             
             # We create a thread to periodically informs the tracker to tell it is still in the torrent.
@@ -47,7 +41,6 @@ def nodeRun(my_ip, node_id, dest_ip, dest_port):
                 #################### exit mode ####################
                 elif mode == 'exit':
                     node.exit_torrent()
-                    close_all_threads()
                     exit(0)
         elif command.lower() == 'exit':
             break
@@ -60,15 +53,12 @@ def connect_tracker(my_ip, my_port):
     tracker_port = config.constants.TRACKER_ADDR[1]
     # Create a node
     nodeRun(my_ip, my_port, tracker_host, tracker_port)
-
-def peer_client(my_ip, my_port):
-    connect_tracker(my_ip, my_port)
     
 def start_peer(my_port):
     client_ip = '192.168.1.63'
     
     # Start the client functionality in a separate thread
-    threading.Thread(target=peer_client, args=(client_ip, my_port,)).start()
+    threading.Thread(target=connect_tracker, args=(client_ip, my_port,)).start()
 
 if __name__ == '__main__':
     # Example usage: start peers sequentially or ensure a delay in client connection attempts
