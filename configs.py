@@ -3,21 +3,21 @@ import json
 
 CFG = {
     "directory": {
-        "logs_dir": "logs/",
-        "node_files_dir": "node_files/",
-        "torrents_dir": "torrents/",
-        "tracker_db_dir": "tracker_DB/"
+        "logs_dir": "logs\\",
+        "peers_dir": "peers\\",
+        "torrents_dir": "torrents\\",
+        "database": "database\\"
     },
     "constants": {
         "AVAILABLE_PORTS_RANGE": (1024, 65535), # range of available ports on the local computer
-        "MASTER_ADDR": ('10.230.198.238', 8080),
-        "TRACKER_ADDR": ('10.230.198.238', 9090),
+        "MASTER_ADDR": ('172.20.71.253', 8080),
+        "TRACKER_ADDR": ('172.20.71.253', 9090),
         "MAX_UDP_SEGMENT_DATA_SIZE": 65527,
         "BUFFER_SIZE": 9216,        # MACOSX UDP MTU is 9216
         "CHUNK_PIECES_SIZE": 9216 - 2000, # Each chunk pieces(segments of UDP) must be lower than UDP buffer size
-        "MAX_SPLITTNES_RATE": 3,    # number of neighboring peers which the node take chunks of a file in parallel
-        "NODE_TIME_INTERVAL": 10,        # the interval time that each node periodically informs the tracker (in seconds)
-        "TRACKER_TIME_INTERVAL": 10      #the interval time that the tracker periodically checks which nodes are in the torrent (in seconds)
+        "MAX_SPLITTNES_RATE": 3,    # number of neighboring peers which the peer take chunks of a file in parallel
+        "PEER_TIME_INTERVAL": 20,        # the interval time that each peer periodically informs the tracker (in seconds)
+        "TRACKER_TIME_INTERVAL": 20      #the interval time that the tracker periodically checks which peers are in the torrent (in seconds)
     },
     "tracker_requests_mode": {
         "REGISTER": 0,  # tells the tracker that it is in the torrent

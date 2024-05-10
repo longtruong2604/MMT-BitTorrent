@@ -55,23 +55,23 @@ def parse_command(command: str):
     '''
     parts = command.split(' ')
     try:
-        if len(parts) == 4:
-            mode = parts[2]
-            filename = parts[3]
+        if len(parts) == 2:
+            mode = parts[0]
+            filename = parts[1]
             return mode, filename
-        elif len(parts) == 3:
-            mode = parts[2]
+        elif len(parts) == 1:
+            mode = parts[0]
             filename = ""
             return mode, filename
     except IndexError:
         warnings.warn("INVALID COMMAND ENTERED. TRY ANOTHER!")
         return
 
-def log(node_id: int, content: str, is_tracker=False) -> None:
+def log(peer_id: int, content: str, is_tracker=False) -> None:
     '''
     This function is used for logging
 
-    :param node_id: Since each node has an individual log file to be written in
+    :param peer_id: Since each peer has an individual log file to be written in
     :param content: content to be written
     :return:
     '''
@@ -86,15 +86,15 @@ def log(node_id: int, content: str, is_tracker=False) -> None:
     print(content)
 
     if is_tracker:
-        node_logs_filename = config.directory.logs_dir + '_tracker.log'
+        peer_logs_filename = config.directory.logs_dir + '_tracker.log'
     else:
-        node_logs_filename = config.directory.logs_dir + 'node' + str(node_id) + '.log'
-    if not os.path.exists(node_logs_filename):
-        with open(node_logs_filename, 'w') as f:
+        peer_logs_filename = config.directory.logs_dir + 'peer' + str(peer_id) + '.log'
+    if not os.path.exists(peer_logs_filename):
+        with open(peer_logs_filename, 'w') as f:
             f.write(content)
             f.close()
     else:
-        with open(node_logs_filename, 'a') as f:
+        with open(peer_logs_filename, 'a') as f:
             f.write(content)
             f.close()
 

@@ -1,38 +1,19 @@
-# import bencodepy
-
-# def get_tracker_url(torrent_file_path):
-#     with open(torrent_file_path, 'rb') as f:
-#         torrent_data = f.read()
-
-#         decoded_torrent = bencodepy.decode(torrent_data)
-        
-#         if b'announce' in decoded_torrent:
-#             tracker_url = decoded_torrent[b'announce']
-#             return tracker_url
-#         else:
-#             return None
-
-# torrent_file_path = './torrent/my_torrent_file.torrent'
-
-# tracker_url = get_tracker_url(torrent_file_path)
-
-# if tracker_url:
-#     print("Tracker URL:", tracker_url)
-# else:
-#     print("Tracker URL not found in the torrent file.")
-
 import bencodepy
+import hashlib
 
-def decode_torrent(torrent_file):
-    # Read the torrent file
-    with open(torrent_file, 'rb') as f:
-        torrent_data = f.read()
-
-    # Decode the torrent data using bencode
-    torrent_dict = bencodepy.decode(torrent_data)
-
-    return torrent_dict
-
-# Example usage:
-torrent_info = decode_torrent('./output_test.torrent')
-print(torrent_info)
+with open('../torrents/test.torrent', 'rb') as f:
+    torrent_data = f.read()
+    torrent_info = bencodepy.decode(torrent_data)
+            
+    test = {
+        'name': torrent_info[b'info'][b'files'][2][b'name'],
+        'length': torrent_info[b'info'][b'files'][2][b'length'],
+        'pieces': torrent_info[b'info'][b'files'][2][b'pieces']
+    }
+    
+    info_bencoded = bencodepy.encode(test)
+    info_hash = hashlib.sha1(info_bencoded).digest()
+    
+    
+    
+    print(torrent_info[b'info'][b'files'])

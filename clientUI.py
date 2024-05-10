@@ -16,7 +16,7 @@ class MyWidget(QWidget):
         self.node = None
 
     def initUI(self):
-        self.setWindowTitle('Split Columns Example')
+        self.setWindowTitle('BitTorrent')
         self.resize(1280, 720)
 
         # Tạo layout chính
@@ -55,7 +55,7 @@ class MyWidget(QWidget):
         self.uploadBTN = QPushButton('Upload')
         self.uploadBTN.setFixedHeight(50)
         self.uploadBTN.clicked.connect(self.handleUpload)
-        self.uploadBTN.setStyleSheet("padding: 10px; background-color: #00A3FF; color: white; border: none; border-radius: 5px;")
+        self.uploadBTN.setStyleSheet("padding: 10px; background-color: #f38120; color: white; border: none; border-radius: 5px;")
         column2_layout.addWidget(self.uploadBTN)
 
         # Tạo nút bên cột 2
@@ -73,7 +73,7 @@ class MyWidget(QWidget):
         column2_layout.addWidget(self.connectTrackerBTN)
 
         # Tạo nút bên cột 2
-        self.exitTrackBTN = QPushButton('Exit')
+        self.exitTrackBTN = QPushButton('Refresh files')
         self.exitTrackBTN.setFixedHeight(50)
         self.exitTrackBTN.clicked.connect(self.handleExitTracker)
         self.exitTrackBTN.setStyleSheet("padding: 10px; background-color: #FF004A; color: white; border: none; border-radius: 5px;")
@@ -82,7 +82,7 @@ class MyWidget(QWidget):
         # Display log
         self.displayLogField = QTextEdit(self)
         self.displayLogField.setReadOnly(True)
-        self.displayLogField.setPlaceholderText("Window for loggin.")
+        self.displayLogField.setPlaceholderText("[10:44:05]  I informed the tracker that I'm still alive in the torrent!")
         column2_layout.addWidget(self.displayLogField)
         
         # Thêm layout cột 1 và cột 2 vào layout chính
