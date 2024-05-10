@@ -17,20 +17,20 @@ warnings.filterwarnings("ignore")
 from configs import CFG, Config
 config = Config.from_json(CFG)
 from messages.message import Message
-from messages.node2tracker import Node2Tracker
-from messages.node2node import Node2Node
+from messages.peer2tracker import Peer2Tracker
+from messages.peer2peer import Peer2Peer
 from messages.chunk_sharing import ChunkSharing
 from segment import UDPSegment
 
 next_call = time.time()
 
 
-class Node:
-    def __init__(self, node_id: int, rcv_port: int, send_port: int, my_ip: str, dest_ip: str, dest_port: int):
-        self.node_id = node_id
+class Peer:
+    def __init__(self, peer_id: int, rcv_port: int, send_port: int, my_ip: str, dest_ip: str, dest_port: int):
+        self.peer_id = peer_id
         # self.rcv_socket = set_socket(dest_ip, rcv_port)
         self.send_socket = set_socket(my_ip, send_port)
-        self.files = self.check_nodes_file(config.directory.node_files_dir + 'node' + str(self.node_id))
+        self.files = self.check_peers_file(config.directory.peers_dir + 'peer' + str(self.peer_id))
         self.is_in_send_mode = False    # is thread uploading a file or not
         self.downloaded_files = {}
         self.running = True
@@ -188,42 +188,43 @@ class Node:
             f.flush()
             f.close()
 
-    def send_chunk(self, filename: str,file_path: str, rng: tuple, dest_node_ip: str ,dest_node_id: int, dest_port: int, infoHash: str):
+    def send_chunk(self, filename: str,file_path: str, rng: tuple, dest_peer_ip: str ,dest_peer_id: int, dest_port: int, infoHash: str):
         file_path = f"{file_path}/{filename}"
         chunk_pieces = self.split_file_to_chunks(file_path=file_path,
                                                  rng=rng)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
         for idx, p in enumerate(chunk_pieces):
-            msg = ChunkSharing(src_node_id=self.node_id,
-                               dest_node_id=dest_node_id,
+            msg = ChunkSharing(src_peer_id=self.peer_id,
+                               dest_peer_id=dest_peer_id,
                                filename=filename,
                                file_path=file_path,
                                range=rng,
                                idx=idx,
                                chunk=p)
             log_content = f"The {idx}/{len(chunk_pieces)} has been sent!"
-            log(node_id=self.node_id, content=log_content)
+            log(peer_id=self.peer_id, content=log_content)
             self.send_segment(sock=temp_sock,
                               data=Message.encode(msg),
-                              addr=(dest_node_ip, dest_port))
+                              addr=(dest_peer_ip, dest_port))
         # now let's tell the neighboring peer that sending has finished (idx = -1)
-        msg = ChunkSharing(src_node_id=self.node_id,
-                           dest_node_id=dest_node_id,
+        msg = ChunkSharing(src_peer_id=self.peer_id,
+                           dest_peer_id=dest_peer_id,
                            filename=filename,
                            file_path=file_path,
                            range=rng)
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
-                          addr=(dest_node_ip, dest_port))
+                          addr=(dest_peer_ip, dest_port))
 
-        log_content = "The process of sending a chunk to node{} of file {} has finished!".format(dest_node_id, filename)
-        log(node_id=self.node_id, content=log_content)
+        log_content = "The process of sending a chunk to peer{} of file {} has finished!".format(dest_peer_id, filename)
+        log(peer_id=self.peer_id, content=log_content)
 
-        msg = Node2Tracker(node_id=self.node_id,
+        msg = Peer2Tracker(peer_id=self.peer_id,
                            mode=config.tracker_requests_mode.UPDATE,
                            filename=filename,
-                           infoHash=infoHash)
+                           infoHash=infoHash,
+                           flag=False)
 
         self.send_segment(sock=temp_sock,
                           data=Message.encode(msg),
@@ -232,7 +233,7 @@ class Node:
         free_socket(temp_sock)
 
     def handle_requests(self, msg: dict, addr: tuple, infoHash: str):
-        # 1. asks the node about a file size
+        # 1. asks the peer about a file size
         if "size" in msg.keys() and msg["size"] == -1:
             self.tell_file_size(msg=msg, addr=addr)
         # 2. Wants a chunk of a file
@@ -240,8 +241,8 @@ class Node:
             self.send_chunk(filename=msg["filename"],
                             file_path=msg["file_path"],
                             rng=msg["range"],
-                            dest_node_ip=addr[0],
-                            dest_node_id=msg["src_node_id"],
+                            dest_peer_ip=addr[0],
+                            dest_peer_id=msg["src_peer_id"],
                             dest_port=addr[1],
                             infoHash=infoHash)
         # 3. Check if folder
@@ -262,11 +263,11 @@ class Node:
                     break  # Exit the loop and terminate the thread
                 else:
                     log_content = f"Socket error: {e}"
-                    log(node_id=self.node_id, content=log_content)
+                    log(peer_id=self.peer_id, content=log_content)
 
     def set_send_mode(self, filename: str, file_path: str, output_path: str, flag: bool):
         if self.check_file_in_nested_list(self.files, filename) == False:
-            log(node_id=self.node_id,
+            log(peer_id=self.peer_id,
                 content=f"You don't have {filename}")
             return
         # Check file or dir
@@ -278,10 +279,11 @@ class Node:
             file_info = self.get_file_info(source_path)
             infoHash = self.create_torrent_from_info(file_info, f"{output_path}{filename}.torrent", flag)
             
-            message = Node2Tracker(node_id=self.node_id,
+            message = Peer2Tracker(peer_id=self.peer_id,
                                mode=config.tracker_requests_mode.OWN,
                                filename=filename,
-                               infoHash=infoHash)
+                               infoHash=infoHash,
+                               flag=flag)
 
             self.send_segment(sock=self.send_socket,
                           data=message.encode(),
@@ -289,12 +291,12 @@ class Node:
         
             if in_send_mode:    # has been already in send(upload) mode
                 log_content = f"You are already in SEND(upload) mode!"
-                log(node_id=self.node_id, content=log_content)
+                log(peer_id=self.peer_id, content=log_content)
                 return
             else:
                 in_send_mode = True
                 log_content = f"DONE!"
-                log(node_id=self.node_id, content=log_content)
+                log(peer_id=self.peer_id, content=log_content)
                 t = Thread(target=self.listen, args=(infoHash,))
                 t.setDaemon(True)
                 t.start()
@@ -307,10 +309,11 @@ class Node:
             directory_info = self.get_directory_info(source_path)
             infoHash = self.create_torrent_from_info(directory_info, f"{output_path}{filename}.torrent", flag)
             
-            message = Node2Tracker(node_id=self.node_id,
+            message = Peer2Tracker(peer_id=self.peer_id,
                                mode=config.tracker_requests_mode.OWN,
                                filename=filename,
-                               infoHash=infoHash)
+                               infoHash=infoHash,
+                               flag=flag)
 
             self.send_segment(sock=self.send_socket,
                           data=message.encode(),
@@ -318,12 +321,12 @@ class Node:
         
             if in_send_mode:    # has been already in send(upload) mode
                 log_content = f"You are already in SEND(upload) mode!"
-                log(node_id=self.node_id, content=log_content)
+                log(peer_id=self.peer_id, content=log_content)
                 return
             else:
                 in_send_mode = True
                 log_content = f"DONE!"
-                log(node_id=self.node_id, content=log_content)
+                log(peer_id=self.peer_id, content=log_content)
                 t = Thread(target=self.listen, args=(infoHash,))
                 t.setDaemon(True)
                 t.start()
@@ -334,10 +337,10 @@ class Node:
     def ask_file_size(self, filename: str, file_path: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        dest_node = file_owner[0]
+        dest_peer = file_owner[0]
 
-        msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=dest_node["node_id"],
+        msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=dest_peer["peer_id"],
                         filename=filename,
                         file_path=file_path,
                         size = -1,
@@ -345,11 +348,11 @@ class Node:
                         list = [])
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
-                          addr=tuple(dest_node["addr"]))
+                          addr=tuple(dest_peer["addr"]))
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
-            dest_node_response = Message.decode(data)
-            size = dest_node_response["size"]
+            dest_peer_response = Message.decode(data)
+            size = dest_peer_response["size"]
             free_socket(temp_sock)
 
             return size
@@ -363,8 +366,8 @@ class Node:
         else:
             file_size = self.get_folder_size(file_path)
             
-        response_msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=msg["src_node_id"],
+        response_msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=msg["src_peer_id"],
                         filename=filename,
                         file_path=file_path,
                         size=file_size,
@@ -381,10 +384,10 @@ class Node:
     def ask_is_folder(self, file_path: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        dest_node = file_owner[0]
+        dest_peer = file_owner[0]
 
-        msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=dest_node["node_id"],
+        msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=dest_peer["peer_id"],
                         filename=file_path,
                         file_path=file_path,
                         size = 0,
@@ -392,11 +395,11 @@ class Node:
                         list = [])
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
-                          addr=tuple(dest_node["addr"]))
+                          addr=tuple(dest_peer["addr"]))
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
-            dest_node_response = Message.decode(data)
-            result = dest_node_response["type"]
+            dest_peer_response = Message.decode(data)
+            result = dest_peer_response["type"]
             free_socket(temp_sock)
 
             return result
@@ -408,8 +411,8 @@ class Node:
         else:
             isFolder = 1
             
-        response_msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=msg["src_node_id"],
+        response_msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=msg["src_peer_id"],
                         filename=filename,
                         file_path="",
                         size=0,
@@ -426,10 +429,10 @@ class Node:
     def ask_list_of_files(self, filename: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        dest_node = file_owner[0]
+        dest_peer = file_owner[0]
 
-        msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=dest_node["node_id"],
+        msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=dest_peer["peer_id"],
                         filename=filename,
                         file_path="",
                         size = 0,
@@ -437,11 +440,11 @@ class Node:
                         list = [])
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
-                          addr=tuple(dest_node["addr"]))
+                          addr=tuple(dest_peer["addr"]))
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
-            dest_node_response = Message.decode(data)
-            result = dest_node_response["list"]
+            dest_peer_response = Message.decode(data)
+            result = dest_peer_response["list"]
             free_socket(temp_sock)
 
             return result
@@ -450,8 +453,8 @@ class Node:
         filename = msg["filename"]
         result = self.fetch_owned_files(filename)
             
-        response_msg = Node2Node(src_node_id=self.node_id,
-                        dest_node_id=msg["src_node_id"],
+        response_msg = Peer2Peer(src_peer_id=self.peer_id,
+                        dest_peer_id=msg["src_peer_id"],
                         filename=filename,
                         file_path="",
                         size= 0,
@@ -466,12 +469,12 @@ class Node:
         free_socket(temp_sock)
 
     def receive_chunk(self, filename: str, file_path: str, range: tuple, file_owner: tuple, infoHash: str):
-        dest_node = file_owner[0]
+        dest_peer = file_owner[0]
         # we set idx of ChunkSharing to -1, because we want to tell it that we
         # need the chunk from it
         
-        msg = ChunkSharing(src_node_id=self.node_id,
-                           dest_node_id=dest_node["node_id"],
+        msg = ChunkSharing(src_peer_id=self.peer_id,
+                           dest_peer_id=dest_peer["peer_id"],
                            filename=filename,
                            file_path = file_path,
                            range=range)
@@ -479,9 +482,9 @@ class Node:
         temp_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
-                          addr=tuple(dest_node["addr"]))
-        log_content = "Send a request for a chunk of {0} for node{1}".format(filename, dest_node["node_id"])
-        log(node_id=self.node_id, content=log_content)
+                          addr=tuple(dest_peer["addr"]))
+        log_content = "Send a request for a chunk of {0} for peer{1}".format(filename, dest_peer["peer_id"])
+        log(peer_id=self.peer_id, content=log_content)
 
         while True:
             data, addr = temp_sock.recvfrom(config.constants.BUFFER_SIZE)
@@ -508,35 +511,35 @@ class Node:
     def split_file_owners(self, file_owners: list, filename: str, infoHash: str):
         owners = []
         for owner in file_owners:
-            if owner[0]['node_id'] != self.node_id:
+            if owner[0]['peer_id'] != self.peer_id:
                 owners.append(owner)
-            elif owner[0]['node_id'] == self.node_id:
+            elif owner[0]['peer_id'] == self.peer_id:
                 log_content = f"You already have this file!"
-                log(node_id=self.node_id, content=log_content)
+                log(peer_id=self.peer_id, content=log_content)
                 return
         print(owners)
         if len(owners) == 0:
             log_content = f"No one has file/folder {filename}"
-            log(node_id=self.node_id, content=log_content)
+            log(peer_id=self.peer_id, content=log_content)
             return
         # sort owners based on their sending frequency
         owners = sorted(owners, key=lambda x: x[1], reverse=True)
 
         to_be_used_owners = owners[:config.constants.MAX_SPLITTNES_RATE]
         # Ask the size of the file from peers
-        log_content = f"You are going to download {filename} from Node(s) {[o[0]['node_id'] for o in to_be_used_owners]}"
-        log(node_id=self.node_id, content=log_content)
+        log_content = f"You are going to download {filename} from Peer(s) {[o[0]['peer_id'] for o in to_be_used_owners]}"
+        log(peer_id=self.peer_id, content=log_content)
         
-        file_size = self.ask_file_size(filename=filename, file_path=f"{config.directory.node_files_dir}node{to_be_used_owners[0][0]['node_id']}", file_owner=to_be_used_owners[0])
+        file_size = self.ask_file_size(filename=filename, file_path=f"{config.directory.peers_dir}peer{to_be_used_owners[0][0]['peer_id']}", file_owner=to_be_used_owners[0])
         log_content = f"You are downloading {filename} with the size of {file_size} bytes"
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
         
-        file_path = f"{config.directory.node_files_dir}node{file_owners[0][0]['node_id']}\{filename}"
+        file_path = f"{config.directory.peers_dir}peer{file_owners[0][0]['peer_id']}\{filename}"
         isFolder = self.ask_is_folder(file_path = file_path,file_owner = file_owners[0])
 
         if isFolder:
             list_data_torrent = self.handle_torrent(f"{config.directory.torrents_dir}{filename}.torrent")
-            source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}"
+            source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}"
             if not os.path.exists(source_path):
                 os.makedirs(source_path)
                 
@@ -553,14 +556,14 @@ class Node:
                                          , file_path=f"{file_path}\{str(file[0])}"
                                          , source_path=f"{source_path}\{str(file[0])}")
         else:
-            source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}"
+            source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}"
             self.download(file_owners=to_be_used_owners, filename=filename,
-                          file_path = f"{config.directory.node_files_dir}node{file_owners[0][0]['node_id']}", 
-                          source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}",
+                          file_path = f"{config.directory.peers_dir}peer{file_owners[0][0]['peer_id']}", 
+                          source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}",
                           infoHash = infoHash)
         
         log_content = f"DOWNLOAD SUCCESS!!!!"
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
         newData = []
         newData.append(os.path.basename(source_path))
         
@@ -588,12 +591,12 @@ class Node:
             t.join()
 
         log_content = "All the chunks of {} has downloaded!".format(filename)
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
 
         # 4. Now we have downloaded all the chunks of the file. It's time to sort them.
         sorted_chunks = self.sort_downloaded_chunks(filename=filename, infoHash=infoHash)
         log_content = f"All the pieces of the {filename} is now sorted and ready to be reassembled."
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
 
         # 5. Finally, we assemble the chunks to re-build the file
         total_file = []
@@ -603,7 +606,7 @@ class Node:
         self.reassemble_file(chunks=total_file,
                              file_path=source_path)
         log_content = f"{filename} has successfully downloaded!"
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
 
     def handle_download(self, list_of_files: list, list_data_torrent: list, to_be_used_owners: list, file_path: str, source_path: str):
         for file in list_of_files:
@@ -629,21 +632,21 @@ class Node:
             filename_decode = self.decode_torrent_name(f"{file_path}/{filename}")
             infoHash_decode = self.decode_torrent_infohash(f"{file_path}/{filename}")
             log_content = f"You just started to download {filename}. Let's search it in torrent!"
-            log(node_id=self.node_id, content=log_content)  
+            log(peer_id=self.peer_id, content=log_content)  
             tracker_response = self.search_torrent(filename=filename_decode, infoHash= infoHash_decode)
             
             file_owners = tracker_response['search_result']
             self.split_file_owners(file_owners=file_owners, filename=filename_decode, infoHash = infoHash_decode)
         else: 
             log_content = f"You don't have this file or the file format is incorrect (.torrent)!"
-            log(node_id=self.node_id, content=log_content)
+            log(peer_id=self.peer_id, content=log_content)
             return
 
     def search_torrent(self, filename: str, infoHash: str) -> dict:
-        msg = Node2Tracker(node_id=self.node_id,
+        msg = Peer2Tracker(peer_id=self.peer_id,
                            mode=config.tracker_requests_mode.NEED,
                            filename=filename,
-                           infoHash=infoHash)
+                           infoHash=infoHash,flag=False)
         temp_port = generate_random_port()
         search_sock = set_socket(self.my_ip, temp_port)
         self.send_segment(sock=search_sock,
@@ -669,7 +672,7 @@ class Node:
                 files_and_folders.append(item)
         return files_and_folders
 
-    def check_nodes_file(self, folder_path: str):
+    def check_peers_file(self, folder_path: str):
         if os.path.isdir(folder_path):
             files = self.fetch_owned_files(folder_path)
         else:
@@ -681,10 +684,11 @@ class Node:
     def exit_torrent(self):
         try:
             if self.send_socket:
-                msg = Node2Tracker(node_id=self.node_id,
+                msg = Peer2Tracker(peer_id=self.peer_id,
                                    mode=config.tracker_requests_mode.EXIT,
                                    filename="",
-                                   infoHash="")
+                                   infoHash="",
+                                   flag=False)
                 self.send_segment(sock=self.send_socket,
                                   data=Message.encode(msg),
                                   addr=tuple((self.dest_ip, self.dest_port)))
@@ -696,31 +700,33 @@ class Node:
                 free_socket(self.send_socket)
             self.running = False
             log_content = f"You exited the torrent!"
-            log(node_id=self.node_id, content=log_content)
+            log(peer_id=self.peer_id, content=log_content)
 
     def enter_torrent(self):
-        msg = Node2Tracker(node_id=self.node_id,
+        msg = Peer2Tracker(peer_id=self.peer_id,
                            mode=config.tracker_requests_mode.REGISTER,
                            filename="",
-                           infoHash="")
+                           infoHash="",
+                           flag=False)
 
         self.send_segment(sock=self.send_socket,
                           data=Message.encode(msg),
                           addr=tuple((self.dest_ip, self.dest_port)))
 
         log_content = f"You entered Torrent."
-        log(node_id=self.node_id, content=log_content)
+        log(peer_id=self.peer_id, content=log_content)
 
     def inform_tracker_periodically(self, interval: int):
         if self.running:
             global next_call
             log_content = f"Ping to server!"
-            log(node_id=self.node_id, content=log_content)
+            log(peer_id=self.peer_id, content=log_content)
 
-            msg = Node2Tracker(node_id=self.node_id,
+            msg = Peer2Tracker(peer_id=self.peer_id,
                             mode=config.tracker_requests_mode.REGISTER,
                             filename="",
-                            infoHash="")
+                            infoHash="",
+                            flag=False)
 
             self.send_segment(sock=self.send_socket,
                             data=msg.encode(),

@@ -14,7 +14,7 @@ def fetch_owned_files(current_path):
             files_and_folders.append(item)
     return files_and_folders
 
-def check_nodes_file(folder_path):
+def check_peers_file(folder_path):
     if os.path.isdir(folder_path):
         files = fetch_owned_files(folder_path)
     else:
@@ -22,7 +22,7 @@ def check_nodes_file(folder_path):
         files = []
     return files
 
-# Sử dụng hàm check_nodes_file để kiểm tra và lấy danh sách tệp tin
-folder_path = "../node_files/node6002/test"
-file_list = check_nodes_file(folder_path)
+# Sử dụng hàm check_peers_file để kiểm tra và lấy danh sách tệp tin
+folder_path = "path"
+file_list = check_peers_file(folder_path)
 print(file_list)
