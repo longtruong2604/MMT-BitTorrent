@@ -331,8 +331,8 @@ class Peer:
                 t.setDaemon(True)
                 t.start()
                 
-            for file in file_list:
-                self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
+            # for file in file_list:
+            #     self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
 
     def ask_file_size(self, filename: str, file_path: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
