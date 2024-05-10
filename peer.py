@@ -272,9 +272,11 @@ class Peer:
             return
         # Check file or dir
         # LOOP - Hash to tracker of dir
-        source_path = f"{file_path}\{filename}"
+        source_path = f"{file_path}/{filename}"
+        print(source_path)
         
         if (os.path.isfile(source_path)):
+            print("here")
             in_send_mode = False
             file_info = self.get_file_info(source_path)
             infoHash = self.create_torrent_from_info(file_info, f"{output_path}{filename}.torrent", flag)
@@ -300,7 +302,7 @@ class Peer:
                 t = Thread(target=self.listen, args=(infoHash,))
                 t.setDaemon(True)
                 t.start()
-                
+        
         elif (os.path.isdir(source_path)):
             in_send_mode = False
             # Get list of all files in the directory
@@ -331,8 +333,8 @@ class Peer:
                 t.setDaemon(True)
                 t.start()
                 
-            for file in file_list:
-                self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
+            # for file in file_list:
+            #     self.set_send_mode(os.path.basename(file), os.path.dirname(file), output_path, False)
 
     def ask_file_size(self, filename: str, file_path: str, file_owner: tuple) -> int:
         temp_port = generate_random_port()
@@ -360,7 +362,7 @@ class Peer:
     def tell_file_size(self, msg: dict, addr: tuple):
         filename = msg["filename"]
         f_path = msg["file_path"]
-        file_path = f"{f_path}\{filename}"
+        file_path = f"{f_path}/{filename}"
         if os.path.isfile(file_path):
             file_size = os.stat(file_path).st_size
         else:
@@ -534,12 +536,12 @@ class Peer:
         log_content = f"You are downloading {filename} with the size of {file_size} bytes"
         log(peer_id=self.peer_id, content=log_content)
         
-        file_path = f"{config.directory.peers_dir}peer{file_owners[0][0]['peer_id']}\{filename}"
+        file_path = f"{config.directory.peers_dir}peer{file_owners[0][0]['peer_id']}/{filename}"
         isFolder = self.ask_is_folder(file_path = file_path,file_owner = file_owners[0])
 
         if isFolder:
             list_data_torrent = self.handle_torrent(f"{config.directory.torrents_dir}{filename}.torrent")
-            source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}"
+            source_path = f"{config.directory.peers_dir}peer{self.peer_id}/{filename}"
             if not os.path.exists(source_path):
                 os.makedirs(source_path)
                 
@@ -548,18 +550,18 @@ class Peer:
             for file in list_of_files:
                 if isinstance(file, str):                    
                     target_object = [item for item in list_data_torrent if item['name'] == file][0]
-                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}\{str(file)}", infoHash = str(target_object['data']))
+                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}/{str(file)}", infoHash = str(target_object['data']))
                 elif isinstance(file, list):
-                    if not os.path.exists(f"{source_path}\{str(file[0])}"):
-                        os.makedirs(f"{source_path}\{str(file[0])}")
+                    if not os.path.exists(f"{source_path}/{str(file[0])}"):
+                        os.makedirs(f"{source_path}/{str(file[0])}")
                     self.handle_download(list_of_files=file[1:], list_data_torrent=list_data_torrent, to_be_used_owners=to_be_used_owners
-                                         , file_path=f"{file_path}\{str(file[0])}"
-                                         , source_path=f"{source_path}\{str(file[0])}")
+                                         , file_path=f"{file_path}/{str(file[0])}"
+                                         , source_path=f"{source_path}/{str(file[0])}")
         else:
-            source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}"
+            source_path = f"{config.directory.peers_dir}peer{self.peer_id}/{filename}"
             self.download(file_owners=to_be_used_owners, filename=filename,
                           file_path = f"{config.directory.peers_dir}peer{file_owners[0][0]['peer_id']}", 
-                          source_path = f"{config.directory.peers_dir}peer{self.peer_id}\{filename}",
+                          source_path = f"{config.directory.peers_dir}peer{self.peer_id}/{filename}",
                           infoHash = infoHash)
         
         log_content = f"DOWNLOAD SUCCESS!!!!"
@@ -614,15 +616,15 @@ class Peer:
                 target_object = [item for item in list_data_torrent if item['name'] == file]
                 if target_object:
                     target_object = target_object[0]
-                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}\{str(file)}", infoHash = str(target_object['data']))
+                    self.download(file_owners=to_be_used_owners, filename=str(file), file_path= file_path, source_path=f"{source_path}/{str(file)}", infoHash = str(target_object['data']))
                 else:
                     return
             elif isinstance(file, list):
-                if not os.path.exists(f"{source_path}\{str(file[0])}"):
-                    os.makedirs(f"{source_path}\{str(file[0])}")
+                if not os.path.exists(f"{source_path}/{str(file[0])}"):
+                    os.makedirs(f"{source_path}/{str(file[0])}")
                 self.handle_download(list_of_files=file[1:], list_data_torrent=list_data_torrent, to_be_used_owners=to_be_used_owners
-                                         , file_path=f"{file_path}\{str(file[0])}"
-                                         , source_path=f"{source_path}\{str(file[0])}")
+                                         , file_path=f"{file_path}/{str(file[0])}"
+                                         , source_path=f"{source_path}/{str(file[0])}")
 
     def set_download_mode(self, filename: str):
         # Process the file torrent
@@ -671,6 +673,16 @@ class Peer:
             else:
                 files_and_folders.append(item)
         return files_and_folders
+
+    def fetch_torrents_files(self) -> list:
+        files = []
+        
+        if os.path.isdir(config.directory.torrents_dir):
+            _, dirs, files = next(os.walk(config.directory.torrents_dir))
+        else:
+            os.makedirs(config.directory.torrents_dir)
+            
+        return files
 
     def check_peers_file(self, folder_path: str):
         if os.path.isdir(folder_path):

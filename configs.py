@@ -3,15 +3,15 @@ import json
 
 CFG = {
     "directory": {
-        "logs_dir": "logs\\",
-        "peers_dir": "peers\\",
-        "torrents_dir": "torrents\\",
-        "database": "database\\"
+        "logs_dir": "logs/",
+        "peers_dir": "peers/",
+        "torrents_dir": "torrents/",
+        "database": "database/"
     },
     "constants": {
         "AVAILABLE_PORTS_RANGE": (1024, 65535), # range of available ports on the local computer
-        "MASTER_ADDR": ('172.20.71.253', 8080),
-        "TRACKER_ADDR": ('172.20.71.253', 9090),
+        "MASTER_ADDR": ('10.230.198.238', 8080),
+        "TRACKER_ADDR": ('10.230.198.238', 9090),
         "MAX_UDP_SEGMENT_DATA_SIZE": 65527,
         "BUFFER_SIZE": 9216,        # MACOSX UDP MTU is 9216
         "CHUNK_PIECES_SIZE": 9216 - 2000, # Each chunk pieces(segments of UDP) must be lower than UDP buffer size

@@ -2,7 +2,7 @@ import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import QTimer
 import threading
-from peer import Node, config, log, parse_command
+from peer import Peer, config, log, parse_command
 
 class MyWidget(QWidget):
     def __init__(self):
@@ -13,7 +13,7 @@ class MyWidget(QWidget):
 
     def initClient(self):
         self.thread_lock = threading.Lock()
-        self.node = None
+        self.peer = None
 
     def initUI(self):
         self.setWindowTitle('BitTorrent')
@@ -75,7 +75,7 @@ class MyWidget(QWidget):
         # Tạo nút bên cột 2
         self.exitTrackBTN = QPushButton('Refresh files')
         self.exitTrackBTN.setFixedHeight(50)
-        self.exitTrackBTN.clicked.connect(self.handleExitTracker)
+        self.exitTrackBTN.clicked.connect(self.handleRefreshFileList)
         self.exitTrackBTN.setStyleSheet("padding: 10px; background-color: #FF004A; color: white; border: none; border-radius: 5px;")
         column2_layout.addWidget(self.exitTrackBTN)
         
@@ -99,58 +99,80 @@ class MyWidget(QWidget):
         # Set interval là 10 giây (10,000 ms)
         self.timer.start(5000)
     
-    def nodeRun(self, my_ip, node_id, dest_ip, dest_port):
+    def peerRun(my_ip, peer_id, dest_ip, dest_port):
+        
+        print("Enter 'join' to connect Tracker server or 'exit' to exit!")
+    
         while True:
-            self.node = Node(node_id=node_id,
-                rcv_port=dest_port,
-                send_port=node_id,
-                my_ip = my_ip,
-                dest_ip = dest_ip,
-                dest_port=dest_port)
-            log_content = f"***************** Node program started just right now! *****************"
-            log(node_id=self.node.node_id, content=log_content)
-            self.node.enter_torrent()
-            
-            # We create a thread to periodically informs the tracker to tell it is still in the torrent.
-            timer_thread = threading.Thread(target=self.node.inform_tracker_periodically, args=(config.constants.NODE_TIME_INTERVAL,))
-            timer_thread.setDaemon(True)
-            timer_thread.start()
+            command = input()
+            if command.lower() == 'join':
+                peer = Peer(peer_id=peer_id,
+                    rcv_port=dest_port,
+                    send_port=peer_id,
+                    my_ip = my_ip,
+                    dest_ip = dest_ip,
+                    dest_port=dest_port)
+                log_content = f"***************** CLIENT START! *****************"
+                log(peer_id=peer.peer_id, content=log_content)
+                
+                # print(peer.files)
+                peer.enter_torrent()
+                
+                # We create a thread to periodically informs the tracker to tell it is still in the torrent.
+                timer_thread = threading.Thread(target=peer.inform_tracker_periodically, args=(config.constants.PEER_TIME_INTERVAL,))
+                timer_thread.setDaemon(True)
+                timer_thread.start()
 
-            print("ENTER YOUR COMMAND (ex: torrent mode <mode> <fileName>!")
-            while True:
-                nodeCommand = input()
-                mode, filename = parse_command(nodeCommand)
+                print("ENTER YOUR COMMAND (ex: <mode> <fileName>!")
+                while True:
+                    peerCommand = input()
+                    mode, filename = parse_command(peerCommand)
 
-                #################### send mode ####################
-                if mode == 'send':
-                    self.node.set_send_mode(filename=filename)
-                #################### download mode ####################
-                elif mode == 'download':
-                    t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
-                    t.setDaemon(True)
-                    t.start()
-                #################### exit mode ####################
-                elif mode == 'exit':
-                    self.node.exit_torrent()
-                    exit(0)
-            # elif command.lower() == 'exit':
-            #     break
-            # else: 
-            #     print("Enter 'join' to connect Tracker server or 'exit' to exit!")
+                    #################### send mode ####################
+                    if mode == 'send':
+                        peer.set_send_mode(filename=filename, file_path=(str(config.directory.peers_dir) + "peer" + str(peer.peer_id)), output_path=(config.directory.torrents_dir), flag=True)
+                    #################### download mode ####################
+                    elif mode == 'download':
+                        t = threading.Thread(target=peer.set_download_mode, args=(filename, ))
+                        t.setDaemon(True)
+                        t.start()
+                    #################### exit mode ####################
+                    elif mode == 'exit':
+                        peer.exit_torrent()
+                        exit(0)
+            elif command.lower() == 'exit':
+                break
+            else: 
+                print("Enter 'join' to connect Tracker server or 'exit' to exit!")
 
     def connect_tracker(self, my_ip, my_port):
         # Connect to another server
         tracker_host = config.constants.TRACKER_ADDR[0]
         tracker_port = config.constants.TRACKER_ADDR[1]
-        # Create a node
-        self.nodeRun(my_ip, my_port, tracker_host, tracker_port)
+        
+        self.peer = Peer(peer_id=my_port,
+            rcv_port=tracker_port,
+            send_port=my_port,
+            my_ip = my_ip,
+            dest_ip = tracker_host,
+            dest_port=tracker_port)
+        
+        log_content = f"***************** CLIENT START! *****************"
+        log(peer_id=self.peer.peer_id, content=log_content)
+
+        # print(peer.files)
+        self.peer.enter_torrent()
+
+        # We create a thread to periodically informs the tracker to tell it is still in the torrent.
+        timer_thread = threading.Thread(target=self.peer.inform_tracker_periodically, args=(config.constants.PEER_TIME_INTERVAL,))
+        timer_thread.setDaemon(True)
+        timer_thread.start()
     
     def start_peer(self, my_port):
         client_ip = '10.230.198.238'
         
         # Start the client functionality in a separate thread
-        threading.Thread(target=self.connect_tracker, args=(client_ip, my_port,)).start()
-
+        self.connect_tracker(client_ip, my_port)
 
     def handleDownload(self):
         # # Lấy tên mục được chọn trong QListWidget
@@ -159,12 +181,12 @@ class MyWidget(QWidget):
             # selected_item_text = selected_items[0].text()
             filename = selected_items[0].text()
             print(filename)
-            t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
+            t = threading.Thread(target=self.peer.set_download_mode, args=(filename, ))
             t.setDaemon(True)
             t.start()
             
         # filename = self.entryFileName.toPlainText()
-        # t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
+        # t = threading.Thread(target=self.peer.set_download_mode, args=(filename, ))
         # t.setDaemon(True)
         # t.start()
 
@@ -175,26 +197,25 @@ class MyWidget(QWidget):
     def handleConnectTracker(self):
         threading.Thread(target=self.start_peer, args=(7777,)).start()
     
-    def handleExitTracker(self):
-        if self.node:
+    def handleRefreshFileList(self):
+        if self.peer:
             self.list_widget.clear()
             # Thêm các mục mới từ mảng vào QListWidget
             
-            files = self.node.fetch_torrents_files()
+            files = self.peer.fetch_torrents_files()
             self.list_widget.addItems(files)
     
     def updateFilesExist(self):
-        if self.node:
+        if self.peer:
             self.list_widget.clear()
             # Thêm các mục mới từ mảng vào QListWidget
             
-            files = self.node.fetch_torrents_files()
+            files = self.peer.fetch_torrents_files()
             self.list_widget.addItems(files)
     
     def handleUpload(self):
-        fileName = self.entryFileName.toPlainText()
-        self.node.set_send_mode(filename=fileName)
-        
+        filename = self.entryFileName.toPlainText()
+        self.peer.set_send_mode(filename=filename, file_path=(str(config.directory.peers_dir) + "peer" + str(self.peer.peer_id)), output_path=(config.directory.torrents_dir), flag=True)
 
 
 # if __name__ == '__main__':

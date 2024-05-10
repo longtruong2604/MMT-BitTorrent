@@ -34,6 +34,7 @@ def peerRun(my_ip, peer_id, dest_ip, dest_port):
 
                 #################### send mode ####################
                 if mode == 'send':
+                    print("Sending...")
                     peer.set_send_mode(filename=filename, file_path=(str(config.directory.peers_dir) + "peer" + str(peer.peer_id)), output_path=(config.directory.torrents_dir), flag=True)
                 #################### download mode ####################
                 elif mode == 'download':
@@ -57,7 +58,7 @@ def connect_tracker(my_ip, my_port):
     peerRun(my_ip, my_port, tracker_host, tracker_port)
     
 def start_peer(my_port):
-    client_ip = '172.20.71.253'
+    client_ip = '10.230.198.238'
     connect_tracker(client_ip, my_port)
 
 if __name__ == '__main__':
