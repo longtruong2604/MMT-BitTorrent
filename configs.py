@@ -6,12 +6,12 @@ CFG = {
         "logs_dir": "logs/",
         "node_files_dir": "node_files/",
         "torrents_dir": "torrents/",
-        "tracker_db_dir": "tracker_db/"
+        "tracker_db_dir": "tracker_DB/"
     },
     "constants": {
         "AVAILABLE_PORTS_RANGE": (1024, 65535), # range of available ports on the local computer
-        "MASTER_ADDR": ('192.168.1.104', 8080),
-        "TRACKER_ADDR": ('192.168.1.104', 9090),
+        "MASTER_ADDR": ('10.230.198.238', 8080),
+        "TRACKER_ADDR": ('10.230.198.238', 9090),
         "MAX_UDP_SEGMENT_DATA_SIZE": 65527,
         "BUFFER_SIZE": 9216,        # MACOSX UDP MTU is 9216
         "CHUNK_PIECES_SIZE": 9216 - 2000, # Each chunk pieces(segments of UDP) must be lower than UDP buffer size

@@ -1,5 +1,6 @@
 import sys
 from PyQt5.QtWidgets import *
+from PyQt5.QtCore import QTimer
 import threading
 from peer import Node, config, log, parse_command
 
@@ -27,8 +28,10 @@ class MyWidget(QWidget):
         # Tạo danh sách tên
         self.list_widget = QListWidget()
         # Thêm các mục vào danh sách
-        for i in range(50):  # Đây chỉ là một ví dụ, bạn có thể thay đổi số lượng tên tùy ý
-            self.list_widget.addItem(f'Item {i}')
+            
+        
+        # for i in range(50):  # Đây chỉ là một ví dụ, bạn có thể thay đổi số lượng tên tùy ý
+        #     self.list_widget.addItem(f'Item {i}')
         column1_layout.addWidget(self.list_widget)
 
         # Đặt padding cho các mục trong QListWidget
@@ -89,6 +92,12 @@ class MyWidget(QWidget):
         # Chia đều chiều rộng của các cột
         layout.setStretchFactor(column1_layout, 2)
         layout.setStretchFactor(column2_layout, 1)
+        
+        # Tạo QTimer
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.updateFilesExist)
+        # Set interval là 10 giây (10,000 ms)
+        self.timer.start(5000)
     
     def nodeRun(self, my_ip, node_id, dest_ip, dest_port):
         while True:
@@ -137,7 +146,7 @@ class MyWidget(QWidget):
         self.nodeRun(my_ip, my_port, tracker_host, tracker_port)
     
     def start_peer(self, my_port):
-        client_ip = '192.168.1.104'
+        client_ip = '10.230.198.238'
         
         # Start the client functionality in a separate thread
         threading.Thread(target=self.connect_tracker, args=(client_ip, my_port,)).start()
@@ -145,14 +154,19 @@ class MyWidget(QWidget):
 
     def handleDownload(self):
         # # Lấy tên mục được chọn trong QListWidget
-        # selected_items = self.list_widget.selectedItems()
-        # if selected_items:
-        #     selected_item_text = selected_items[0].text()
-        #     print(f'Selected item: {selected_item_text}')
-        filename = self.entryFileName.toPlainText()
-        t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
-        t.setDaemon(True)
-        t.start()
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            # selected_item_text = selected_items[0].text()
+            filename = selected_items[0].text()
+            print(filename)
+            t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
+            t.setDaemon(True)
+            t.start()
+            
+        # filename = self.entryFileName.toPlainText()
+        # t = threading.Thread(target=self.node.set_download_mode, args=(filename, ))
+        # t.setDaemon(True)
+        # t.start()
 
     def uploadClicked(self):
         file_dialog = QFileDialog()
@@ -162,11 +176,25 @@ class MyWidget(QWidget):
         threading.Thread(target=self.start_peer, args=(7777,)).start()
     
     def handleExitTracker(self):
-        pass
+        if self.node:
+            self.list_widget.clear()
+            # Thêm các mục mới từ mảng vào QListWidget
+            
+            files = self.node.fetch_torrents_files()
+            self.list_widget.addItems(files)
+    
+    def updateFilesExist(self):
+        if self.node:
+            self.list_widget.clear()
+            # Thêm các mục mới từ mảng vào QListWidget
+            
+            files = self.node.fetch_torrents_files()
+            self.list_widget.addItems(files)
     
     def handleUpload(self):
         fileName = self.entryFileName.toPlainText()
         self.node.set_send_mode(filename=fileName)
+        
 
 
 # if __name__ == '__main__':

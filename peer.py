@@ -396,6 +396,16 @@ class Node:
             os.makedirs(node_files_dir)
 
         return files
+    
+    def fetch_torrents_files(self) -> list:
+        files = []
+        
+        if os.path.isdir(config.directory.torrents_dir):
+            _, dirs, files = next(os.walk(config.directory.torrents_dir))
+        else:
+            os.makedirs(config.directory.torrents_dir)
+            
+        return files
 
     def exit_torrent(self):
         try:
