@@ -37,7 +37,7 @@ class Tracker:
             'node_id': msg['node_id'],
             'addr': addr
         }
-        log_content = f"Node {msg['node_id']} owns {msg['filename']} and is ready to seed."
+        log_content = f"Peer {msg['node_id']} owns {msg['filename']} and is ready to seed."
         log(node_id=0, content=log_content, is_tracker=True)
         
         self.file_owners_list[str(msg['infoHash'])].append(json.dumps(entry))
@@ -52,7 +52,7 @@ class Tracker:
         self.save_db_as_json()
 
     def search_file(self, msg: dict, addr: tuple):
-        log_content = f"Node{msg['node_id']} is searching for {msg['filename']}"
+        log_content = f"Peer {msg['node_id']} is searching for {msg['filename']}"
         log(node_id=0, content=log_content, is_tracker=True)
 
         matched_entries = []
@@ -104,7 +104,7 @@ class Tracker:
             pass
 
         if not (len(alive_nodes_ids) == 0 and len(dead_nodes_ids) == 0):
-            log_content = f"Node(s) {list(alive_nodes_ids)} is in the torrent and node(s){list(dead_nodes_ids)} have left."
+            log_content = f"Peer(s) {list(alive_nodes_ids)} is in the torrent and peer(s){list(dead_nodes_ids)} have left."
             log(node_id=0, content=log_content, is_tracker=True)
 
         datetime.now()
@@ -142,7 +142,7 @@ class Tracker:
             self.has_informed_tracker[(msg['node_id'], addr)] = True
         elif mode == config.tracker_requests_mode.EXIT:
             self.remove_node(node_id=msg['node_id'], addr=addr)
-            log_content = f"Node {msg['node_id']} exited torrent intentionally."
+            log_content = f"Peer {msg['node_id']} exited torrent intentionally."
             log(node_id=0, content=log_content, is_tracker=True)
 
     def listen(self):
