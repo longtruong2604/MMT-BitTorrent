@@ -358,7 +358,6 @@ class Node:
         filename = msg["filename"]
         f_path = msg["file_path"]
         file_path = f"{f_path}\{filename}"
-        print(file_path)
         if os.path.isfile(file_path):
             file_size = os.stat(file_path).st_size
         else:
@@ -478,7 +477,6 @@ class Node:
                            range=range)
         temp_port = generate_random_port()
         temp_sock = set_socket(self.my_ip, temp_port)
-        print(dest_node)
         self.send_segment(sock=temp_sock,
                           data=msg.encode(),
                           addr=tuple(dest_node["addr"]))
@@ -555,6 +553,7 @@ class Node:
                                          , file_path=f"{file_path}\{str(file[0])}"
                                          , source_path=f"{source_path}\{str(file[0])}")
         else:
+            source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}"
             self.download(file_owners=to_be_used_owners, filename=filename,
                           file_path = f"{config.directory.node_files_dir}node{file_owners[0][0]['node_id']}", 
                           source_path = f"{config.directory.node_files_dir}node{self.node_id}\{filename}",
@@ -562,6 +561,13 @@ class Node:
         
         log_content = f"DOWNLOAD SUCCESS!!!!"
         log(node_id=self.node_id, content=log_content)
+        newData = []
+        newData.append(os.path.basename(source_path))
+        
+        if isFolder:
+            newData.append(self.fetch_owned_files(source_path))
+        
+        self.files.append(newData)
 
     def download(self, file_owners: list, filename: str, file_path: str, source_path: str, infoHash: str):
         # 1. Ask file size
@@ -598,7 +604,6 @@ class Node:
                              file_path=source_path)
         log_content = f"{filename} has successfully downloaded!"
         log(node_id=self.node_id, content=log_content)
-        self.files.append(filename)
 
     def handle_download(self, list_of_files: list, list_data_torrent: list, to_be_used_owners: list, file_path: str, source_path: str):
         for file in list_of_files:

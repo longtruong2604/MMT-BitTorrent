@@ -57,7 +57,7 @@ def connect_tracker(my_ip, my_port):
     nodeRun(my_ip, my_port, tracker_host, tracker_port)
     
 def start_peer(my_port):
-    client_ip = '172.20.41.134'
+    client_ip = '172.20.71.253'
     
     # Start the client functionality in a separate thread
     threading.Thread(target=connect_tracker, args=(client_ip, my_port,)).start()

@@ -152,7 +152,6 @@ class Tracker:
 
         while True:
             data, addr = self.tracker_socket.recvfrom(config.constants.BUFFER_SIZE)
-            # print("addr", addr)
             t = Thread(target=self.handle_node_request, args=(data, addr))
             t.start()
 
